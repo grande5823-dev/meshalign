@@ -1,0 +1,16 @@
+name: meshalign
+channels:
+  - conda-forge
+dependencies:
+  - python=3.11
+  - pip
+  - numpy
+  - matplotlib
+  - pandas
+  - scipy
+  - networkx
+  - shapely
+  - pip:
+      - open3d>=0.18,<0.20
+      - trimesh>=3.21
+      - pytest

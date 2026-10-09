@@ -1,0 +1,13 @@
+__pycache__/
+*.pyc
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+examples/out/
+.ipynb_checkpoints/
+benchmark_results/
+
+# webapp runtime state (style guide: runs + uploads are data, not code)
+webapp/runs/
+webapp/uploads/

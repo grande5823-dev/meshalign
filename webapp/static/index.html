@@ -1,0 +1,1600 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>meshalign console</title>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="/static/vendor/plotly.min.js"></script>
+<script type="importmap">
+{"imports": {"three": "/static/vendor/three.module.js", "three/addons/": "/static/vendor/"}}
+</script>
+<style>
+:root {
+  --bg:            #EBF1F7;
+  --surface:       #FFFFFF;
+  --surface-2:     #F6F9FC;
+  --border:        #D7E1EC;
+  --border-strong: #C4D2E0;
+  --text:          #132433;
+  --text-muted:    #566A7E;
+  --text-faint:     #90A2B4;
+  --accent:        #0C5779;
+  --accent-hover:  #0A4763;
+  --accent-soft:   #E3ECF0;
+  --on-accent:     #FFFFFF;
+  --focus:         #0C5779;
+  --success:       #1E9E4A;
+  --warning:       #B87708;
+  --danger:        #D8382F;
+  --danger-tint:   #FAE7E6;
+  --neutral:       #566A7E;
+  --radius:        6px;
+  --radius-sm:     4px;
+  --shadow-pop:    0 4px 16px rgba(19,36,51,.10);
+  --font-sans:     'Geist', system-ui, sans-serif;
+  --font-mono:     'Geist Mono', ui-monospace, monospace;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0;height:100%}
+body{background:var(--bg);color:var(--text);font-family:var(--font-sans);font-size:14px;
+  display:flex;flex-direction:column;overflow:hidden}
+button,input,select{font:inherit;color:inherit}
+.num,.mono{font-variant-numeric:tabular-nums}
+
+/* ---------- top bar ---------- */
+#topbar{display:flex;align-items:center;gap:16px;height:52px;padding:0 20px;flex-shrink:0;
+  background:var(--surface);border-bottom:1px solid(--border)}
+#topbar .app-name{font-weight:600;font-size:15px;white-space:nowrap}
+#topbar .context{font-size:13px;color:var(--text-muted);white-space:nowrap;overflow:hidden;
+  text-overflow:ellipsis;max-width:40vw}
+#topbar .spacer{flex:1}
+.pill{display:inline-flex;align-items:center;gap:6px;padding:3px 10px;border-radius:999px;
+  font-size:12px;background:var(--surface-2);color:var(--text)}
+.pill .dot{width:7px;height:7px;border-radius:50%}
+.pill{background:var(--neutral-tint, #EBEDF0)}
+.pill[data-state="queued"]{background:var(--warning-tint, #F6EFE1)}
+.pill[data-state="running"]{background:var(--accent-soft)}
+.pill[data-state="succeeded"]{background:var(--success-tint, #E4F3E9)}
+.pill[data-state="failed"]{background:var(--danger-tint)}
+.pill[data-state="cancelled"]{background:var(--neutral-tint, #EBEDF0)}
+.pill[data-state="idle"] .dot{background:var(--neutral)}
+.pill[data-state="queued"] .dot{background:var(--warning)}
+.pill[data-state="running"] .dot{background:var(--accent)}
+.pill[data-state="succeeded"] .dot{background:var(--success)}
+.pill[data-state="failed"] .dot{background:var(--danger)}
+.pill[data-state="cancelled"] .dot{background:var(--neutral)}
+
+/* ---------- shell ---------- */
+#shell{display:flex;flex:1;min-height:0}
+#left{width:320px;min-width:320px;background:var(--surface);border-right:1px solid(--border);
+  display:flex;flex-direction:column;overflow:hidden}
+#controls{padding:16px;overflow-y:auto;flex:1;display:flex;flex-direction:column;gap:16px}
+.field{display:flex;flex-direction:column;gap:6px}
+.field label{font-size:12px;color:var(--text-muted);font-weight:500}
+.field select,.field input{width:100%;height:32px;padding:0 8px;background:var(--surface);
+  border:1px solid var(--border-strong);border-radius:var(--radius-sm)}
+.field select:disabled,.field input:disabled{background:var(--surface-2);color:var(--text-faint)}
+.field select:focus,.field input:focus{outline:2px solid var(--focus);outline-offset:2px}
+.field .helper{font-size:11px;color:var(--text-faint)}
+.field .error{font-size:11px;color:var(--danger);display:none}
+.field.invalid .error{display:block}
+.field.invalid select,.field.invalid input{border-color:var(--danger)}
+.field.invalid .uprow input{border-color:var(--border)}
+fieldset{border:none;padding:0;margin:0}
+.section{border-top:1px solid var(--border);padding-top:12px;display:flex;flex-direction:column;gap:12px}
+.section:first-child{border-top:none;padding-top:0}
+.section legend,.section .sec-title{font-size:12px;font-weight:600;color:var(--text);margin-bottom:2px}
+.check{display:flex;align-items:center;gap:8px;font-size:13px}
+.check input{width:auto;height:auto}
+#left .actions{padding:12px 16px;border-top:1px solid(--border);display:flex;gap:8px;flex-wrap:wrap}
+
+/* ---------- buttons ---------- */
+button.btn{height:32px;padding:0 12px;border-radius:var(--radius);font-size:13px;font-weight:500;
+  cursor:pointer;border:1px solid var(--border-strong);background:var(--surface);white-space:nowrap}
+button.btn:hover{background:var(--surface-2)}
+button.btn:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+button.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
+button.btn.primary:hover{background:var(--accent-hover)}
+button.btn.danger{background:var(--surface);border-color:var(--danger);color:var(--danger)}
+button.btn:disabled{color:var(--text-faint);cursor:default;background:var(--surface-2);border-color:var(--border)}
+button.btn.grow{flex:1}
+
+/* ---------- center ---------- */
+#center{flex:1;min-width:0;display:flex;flex-direction:column}
+#runbar{display:flex;align-items:center;gap:16px;padding:0 16px;height:44px;flex-shrink:0;
+  border-bottom:1px solid var(--border);background:var(--surface)}
+#tabs{display:flex;height:100%;gap:4px}
+#tabs button{border:none;background:none;padding:0 12px;font-size:13px;color:var(--text-muted);
+  cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px}
+#tabs button.active{color:var(--text);font-weight:600;border-bottom-color:var(--accent)}
+#progresswrap{flex:1;display:none;align-items:center;gap:10px;min-width:0}
+#progresswrap.on{display:flex}
+#progressbar{flex:1;height:6px;background:var(--surface-2);border-radius:3px;overflow:hidden}
+#progressfill{height:100%;width:0%;background:var(--accent);transition:width .3s}
+#elapsed{font-size:12px;color:var(--text-muted);font-family:var(--font-mono)}
+#viewport{flex:1;min-height:0;position:relative;background:var(--surface)}
+.tabpane{display:none;position:absolute;inset:0}
+.tabpane.active{display:block}
+#three-canvas{width:100%;height:100%;display:block}
+#three-overlay{position:absolute;left:12px;bottom:12px;display:flex;gap:12px;pointer-events:none;
+  font-size:11px;color:var(--text-muted);font-family:var(--font-mono)}
+#three-hud{position:absolute;right:12px;top:12px;display:flex;flex-direction:column;gap:8px;align-items:flex-end}
+#three-hud .row{display:flex;gap:8px}
+#three-colorbar{position:absolute;right:12px;bottom:44px;display:none;flex-direction:column;gap:4px;
+  font-size:10px;color:var(--text-muted);font-family:var(--font-mono);align-items:center}
+#colorbar-strip{width:14px;height:140px;border-radius:3px;border:1px solid var(--border)}
+#three-legend{position:absolute;left:12px;top:12px;font-size:11px;color:var(--text-muted);max-width:340px;
+  background:rgba(255,255,255,.85);padding:6px 10px;border-radius:var(--radius-sm);border:1px solid var(--border)}
+#spinner{position:absolute;inset:0;display:none;align-items:center;justify-content:center;gap:10px;
+  background:rgba(255,255,255,.7);font-size:13px;color:var(--text-muted);z-index:5}
+#spinner.on{display:flex}
+.spin{width:18px;height:18px;border:2px solid var(--border);border-top-color:var(--accent);
+  border-radius:50%;animation:rot .8s linear infinite}
+@keyframes rot{to{transform:rotate(360deg)}}
+#hist-plot{width:100%;height:100%}
+#table-pane{overflow-y:auto;padding:20px}
+.panel{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);
+  padding:16px;margin-bottom:16px}
+.panel h2{margin:0 0 4px;font-size:13px;font-weight:600}
+.panel .sub{font-size:12px;color:var(--text-muted);margin-bottom:10px}
+table.grid{border-collapse:collapse;width:100%;font-size:13px}
+table.grid th{background:var(--surface-2);font-weight:600;font-size:12px;text-align:left;
+  padding:6px 10px;border-bottom:1px solid var(--border);white-space:nowrap}
+table.grid td{padding:6px 10px;border-bottom:1px solid var(--border);white-space:nowrap}
+table.grid td.num{font-family:var(--font-mono);font-variant-numeric:tabular-nums;text-align:right}
+tr:nth-child(even) td{background:var(--surface-2)}
+details.traceback summary{cursor:pointer;font-size:12px;color:var(--text-muted)}
+details.traceback pre{font-size:11px;background:var(--surface-2);padding:10px;border-radius:var(--radius-sm);
+  overflow-x:auto;font-family:var(--font-mono)}
+
+/* ---------- results panel ---------- */
+#right{width:300px;min-width:300px;background:var(--surface);border-left:1px solid var(--border);
+  display:flex;flex-direction:column;overflow:hidden}
+#metrics{padding:16px;display:grid;grid-template-columns:1fr 1fr;gap:10px;flex-shrink:0;
+  border-bottom:1px solid var(--border)}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);
+  padding:10px 12px;display:flex;flex-direction:column;gap:2px;min-width:0}
+.card .label{font-size:11px;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.card .value{font-size:20px;font-family:var(--font-mono);font-variant-numeric:tabular-nums;white-space:nowrap}
+.card .unit{font-size:11px;color:var(--text-faint);font-weight:400}
+#history{flex:1;overflow-y:auto;padding:12px 16px}
+#history h2{font-size:12px;font-weight:600;margin:0 0 8px;color:var(--text-muted)}
+.runrow{display:flex;flex-direction:column;gap:2px;padding:8px 10px;border:1px solid var(--border);
+  border-radius:var(--radius-sm);margin-bottom:8px;cursor:pointer;background:var(--surface)}
+.runrow:hover{background:var(--accent-soft)}
+.runrow.selected{border-color:var(--accent);background:var(--accent-soft)}
+.runrow .r1{display:flex;justify-content:space-between;align-items:center;gap:6px;font-size:12px}
+.runrow .r1 .id{font-family:var(--font-mono);font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.runrow .r2{display:flex;justify-content:space-between;gap:6px;font-size:11px;color:var(--text-muted)}
+.runrow .r2 .num{font-family:var(--font-mono)}
+.runrow input[type=checkbox]{margin-right:4px}
+#compare-btn{margin:0 16px 12px;display:none}
+
+/* ---------- log console ---------- */
+#logconsole{height:160px;flex-shrink:0;background:var(--surface);border-top:1px solid var(--border);
+  display:flex;flex-direction:column}
+#logconsole.collapsed{height:36px}
+#logconsole.collapsed #logbody{display:none}
+#logbar{display:flex;align-items:center;gap:8px;height:36px;padding:0 12px;flex-shrink:0}
+#logbar .title{font-size:12px;font-weight:600;color:var(--text-muted)}
+#logbar .spacer{flex:1}
+#logbar button{height:24px;padding:0 8px;font-size:12px}
+#logbody{flex:1;overflow-y:auto;background:var(--surface-2);margin:0 12px 10px;border-radius:var(--radius-sm);
+  font-family:var(--font-mono);font-size:11.5px;padding:8px 10px;white-space:pre-wrap;word-break:break-all}
+#logbody .INFO{color:var(--text-muted)}
+#logbody .WARN{color:var(--warning)}
+#logbody .ERROR{color:var(--danger)}
+
+/* ---------- misc ---------- */
+.empty{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;
+  justify-content:center;gap:8px;color:var(--text-muted);font-size:13px;text-align:center;padding:20px}
+.error-box{border:1px solid var(--danger);border-radius:var(--radius);padding:16px;
+  background:var(--surface);font-size:13px;display:flex;flex-direction:column;gap:8px}
+.error-box .code{font-family:var(--font-mono);font-size:12px;color:var(--danger)}
+#toasts{position:fixed;right:16px;bottom:16px;display:flex;flex-direction:column;gap:8px;z-index:60}
+.toast{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);
+  box-shadow:var(--shadow-pop);padding:10px 14px;font-size:13px;max-width:380px}
+.toast.error{border-color:var(--danger)}
+.skeleton{background:linear-gradient(90deg,var(--surface-2) 25%,#E2EAF2 50%,var(--surface-2) 75%);
+  background-size:200% 100%;animation:shimmer 1.2s infinite;border-radius:var(--radius-sm)}
+@keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
+
+@media (max-width:1100px){#right{display:none}}
+@media (max-width:640px){
+  #shell{flex-direction:column}
+  #left,#right{width:100%;min-width:0}
+  body{overflow:auto}
+}
+
+#cmdbar{display:flex;flex-wrap:wrap;gap:4px}
+#cmdbar button.btn{height:28px;padding:0 10px;font-size:12px}
+#cmdbar button.btn.active{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
+#cmdbar button.btn:disabled{opacity:.6}
+.cmd-summary{font-size:12px;color:var(--text-muted);margin-bottom:10px}
+#form .section{border-top:none;padding-top:0}
+#form .field{margin-bottom:12px}
+details.adv{border-top:1px solid var(--border);padding-top:10px;margin-top:4px}
+details.adv summary{font-size:12px;font-weight:600;cursor:pointer;margin-bottom:10px}
+.checklist{display:flex;flex-direction:column;gap:4px;max-height:150px;overflow-y:auto;
+  border:1px solid var(--border);border-radius:var(--radius-sm);padding:6px 8px;background:var(--surface)}
+.checklist .check{font-size:12px}
+.muted{color:var(--text-faint)}
+.uprow{display:flex;gap:6px}
+.uprow input[type=text]{flex:1;min-width:0}
+.field > .btn{align-self:flex-start;margin-top:4px}
+.cli-box{border-top:1px solid var(--border);padding:10px 16px 0;display:flex;flex-direction:column;gap:6px;flex-shrink:0}
+.cli-head{display:flex;justify-content:space-between;align-items:center}
+.cli-head .btn{height:24px;font-size:11px;padding:0 8px}
+.cli-box pre.cli{max-height:64px;overflow:auto}
+.row{display:flex;gap:6px;align-items:center}
+.row select{flex:1;min-width:0}
+.row .btn{height:32px;margin-top:0;white-space:nowrap}
+pre.cli{margin:0;padding:8px 10px;background:var(--surface-2);border:1px solid var(--border);
+  border-radius:var(--radius-sm);font-family:var(--font-mono);font-size:11px;white-space:pre-wrap;word-break:break-all}
+.runrow .cmdtag{font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:var(--text-faint);margin-right:6px}
+</style>
+</head>
+<body>
+
+<header id="topbar">
+  <span class="app-name">meshalign console</span>
+  <span class="context" id="context-label" data-testid="context-label">no run selected</span>
+  <span class="spacer"></span>
+  <span class="pill" id="status-pill" data-testid="run-status" data-state="idle" aria-live="polite">
+    <span class="dot"></span><span id="status-text">Idle</span>
+  </span>
+</header>
+
+<div id="shell">
+  <aside id="left">
+    <div id="controls">
+      <nav id="cmdbar" aria-label="commands" data-testid="cmdbar"></nav>
+      <div id="form" data-testid="param-form"></div>
+    </div>
+    <div class="cli-box">
+      <div class="cli-head"><span class="sec-title">CLI equivalent</span>
+        <button class="btn" id="cli-copy" data-testid="cli-copy" type="button">Copy</button></div>
+      <pre id="cli-line" class="cli" data-testid="cli-line"></pre>
+    </div>
+    <div class="actions">
+      <button class="btn primary grow" id="run-btn" data-testid="run-button">Run</button>
+      <button class="btn danger" id="stop-btn" data-testid="stop-button" disabled>Stop</button>
+      <button class="btn" id="reset-btn" data-testid="reset-button" style="flex-basis:100%">Reset to defaults</button>
+    </div>
+  </aside>
+
+  <div id="center">
+    <div id="runbar">
+      <nav id="tabs" aria-label="views">
+        <button data-tab="3d" class="active" data-testid="tab-3d">3D view</button>
+        <button data-tab="histogram" data-testid="tab-histogram">Histogram</button>
+        <button data-tab="table" data-testid="tab-table">Table</button>
+      </nav>
+      <div id="progresswrap">
+        <div id="progressbar"><div id="progressfill"></div></div>
+        <span id="elapsed" data-testid="elapsed">0.0 s</span>
+      </div>
+    </div>
+    <div id="viewport">
+      <!-- 3D tab -->
+      <div class="tabpane active" id="pane-3d">
+        <canvas id="three-canvas"></canvas>
+        <div id="three-legend"></div>
+        <div id="three-hud">
+          <div class="row">
+            <button class="btn" id="v-reset" data-testid="view-reset">Reset view</button>
+            <button class="btn" id="v-fit" data-testid="view-fit">Fit to data</button>
+          </div>
+          <div class="row">
+            <button class="btn" id="v-wire" data-testid="view-wireframe">Toggle wireframe</button>
+            <button class="btn" id="v-points" data-testid="view-points">Toggle points</button>
+          </div>
+          <div class="row">
+            <button class="btn" id="v-ref" data-testid="view-reference">Reference: wireframe</button>
+          </div>
+        </div>
+        <div id="three-colorbar">
+          <span id="colorbar-max" class="num">+50</span>
+          <div id="colorbar-strip"></div>
+          <span id="colorbar-min" class="num">−50</span>
+          <span>µm</span>
+        </div>
+        <div id="three-overlay">
+          <span>units: mm</span><span>up: Z</span><span id="mesh-stats"></span>
+        </div>
+        <div id="spinner"><div class="spin"></div><span id="spinner-text" data-testid="loading-label">loading…</span></div>
+        <div class="empty" id="empty-3d" data-testid="empty-3d">
+          <b>No result yet</b>
+          <span>Pick a reference and a test mesh on the left, then press Run.<br>
+          The aligned pair appears here, colored by signed surface error.</span>
+        </div>
+      </div>
+      <!-- histogram tab -->
+      <div class="tabpane" id="pane-histogram">
+        <div id="hist-plot" data-testid="plot-histogram"></div>
+        <div class="empty" id="empty-hist" data-testid="empty-histogram">
+          <b>No result yet</b><span>Run an alignment to see the error distribution.</span>
+        </div>
+      </div>
+      <!-- table tab -->
+      <div class="tabpane" id="pane-table">
+        <div id="table-pane">
+          <div class="empty" id="empty-table" style="position:static" data-testid="empty-table">
+            <b>No result yet</b><span>Run an alignment to see metrics and provenance.</span>
+          </div>
+          <div id="table-content"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <aside id="right">
+    <div id="metrics" data-testid="metrics-panel">
+      <div class="card"><span class="label">Surface MAE</span><span class="value" data-testid="metric-mae_um">–</span><span class="unit">µm</span></div>
+      <div class="card"><span class="label">p95 error</span><span class="value" data-testid="metric-p95_um">–</span><span class="unit">µm</span></div>
+      <div class="card"><span class="label">Rel. MAE</span><span class="value" data-testid="metric-rel_mae_pct">–</span><span class="unit">% of char. length</span></div>
+      <div class="card"><span class="label">Chamfer</span><span class="value" data-testid="metric-chamfer_mm">–</span><span class="unit">mm</span></div>
+      <div class="card"><span class="label">Voxel IoU</span><span class="value" data-testid="metric-iou">–</span><span class="unit">–</span></div>
+      <div class="card"><span class="label">Duration</span><span class="value" data-testid="metric-duration_s">–</span><span class="unit">s</span></div>
+    </div>
+    <div id="history">
+      <h2>Run history</h2>
+      <div id="history-list" data-testid="run-history"></div>
+    </div>
+    <button class="btn" id="compare-btn" data-testid="compare-button">Compare selected</button>
+  </aside>
+</div>
+
+<div id="logconsole">
+  <div id="logbar">
+    <span class="title">Log</span>
+    <span class="spacer"></span>
+    <button class="btn" id="log-copy" data-testid="log-copy">Copy</button>
+    <button class="btn" id="log-clear" data-testid="log-clear">Clear</button>
+    <button class="btn" id="log-toggle" data-testid="log-toggle">Hide</button>
+  </div>
+  <div id="logbody" data-testid="log-console" aria-live="polite"></div>
+</div>
+
+<div id="toasts"></div>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+/* ============================================================
+   meshalign console — vanilla JS, no build step.
+   State machine: idle -> running -> succeeded/failed/cancelled.
+   URL carries the selection: ?run=<id>&tab=3d|histogram|table
+   ============================================================ */
+'use strict';
+
+const $ = (s, el=document) => el.querySelector(s);
+const $$ = (s, el=document) => [...el.querySelectorAll(s)];
+
+const state = {
+  tab: '3d',
+  runId: null,          // run being viewed
+  activeRun: null,      // run being executed/watched (from health)
+  datasets: [],
+  groups: [],
+  commands: {},
+  command: null,
+  values: {},
+  rec: null,
+  schema: {},
+  view: null,           // viewer payload of runId
+  es: null,             // EventSource
+  runStartWall: null,
+  compare: new Set(),
+  viewer: null,         // ThreeViewer instance
+};
+
+/* ---------------- helpers ---------------- */
+async function api(path, opts){
+  const res = await fetch(path, Object.assign({headers:{Accept:'application/json'}}, opts));
+  if (!res.ok){
+    let msg = res.status + ' ' + res.statusText, code = 'http_error';
+    try { const j = await res.json(); msg = j.error.message; code = j.error.code; } catch(e){}
+    throw Object.assign(new Error(msg), {code});
+  }
+  return res.status === 204 ? null : res.json();
+}
+function toast(msg, isError){
+  const t = document.createElement('div');
+  t.className = 'toast' + (isError ? ' error' : '');
+  t.textContent = msg; t.setAttribute('data-testid','toast');
+  $('#toasts').appendChild(t); setTimeout(() => t.remove(), 5000);
+}
+function fmt(v, d=2){
+  if (v == null || Number.isNaN(v)) return '–';
+  return Number(v).toFixed(d);
+}
+function fmtBytes(b){
+  if (b == null) return '';
+  if (b > 1e6) return (b/1e6).toFixed(1) + ' MB';
+  if (b > 1e3) return (b/1e3).toFixed(0) + ' kB';
+  return b + ' B';
+}
+function nowUTC(){ return new Date().toISOString().slice(0,19).replace('T',' '); }
+
+/* ---------------- routing ---------------- */
+function parseQS(){
+  const qs = new URLSearchParams(location.search);
+  const tab = ['3d','histogram','table'].includes(qs.get('tab')) ? qs.get('tab') : '3d';
+  return { tab, run: qs.get('run') };
+}
+function writeQS(replace=true){
+  const qs = new URLSearchParams();
+  if (state.tab !== '3d') qs.set('tab', state.tab);
+  if (state.runId) qs.set('run', state.runId);
+  const url = location.pathname + (qs.toString() ? '?' + qs : '');
+  if (replace) history.replaceState(null,'',url); else history.pushState(null,'',url);
+}
+window.addEventListener('popstate', () => { const p = parseQS(); setTab(p.tab); if (p.run !== state.runId) loadRun(p.run); });
+
+function setTab(tab){
+  state.tab = tab;
+  $$('#tabs button').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+  $$('.tabpane').forEach(p => p.classList.toggle('active', p.id === 'pane-' + tab));
+  writeQS();
+  if (tab === 'histogram') renderHistogram();
+  if (tab === 'table') renderTable();
+  if (tab === '3d' && state.viewer) state.viewer.resize();
+}
+
+/* ---------------- status pill / state behavior ---------------- */
+function setStatus(st, msg){
+  const pill = $('#status-pill');
+  pill.dataset.state = st;
+  pill.setAttribute('data-state', st);
+  $('#status-text').textContent = msg || st.charAt(0).toUpperCase() + st.slice(1);
+  const running = st === 'running' || st === 'queued';
+  // controls lock while running (guide §10); when not running the Run
+  // button's enabled state is governed by form validity (validateParams)
+  $$('#controls select, #controls input, #controls details button, #cmdbar button, #form button').forEach(el => el.disabled = running);
+  $('#run-btn').textContent = running ? 'Running…' : (RUN_LABEL[state.command] || 'Run');
+  if (running){
+    $('#run-btn').disabled = true;
+  } else {
+    validateParams();
+  }
+  $('#stop-btn').disabled = !running;
+  $('#progresswrap').classList.toggle('on', running);
+}
+
+/* ---------------- command registry + schema-driven form ----------------
+   Everything below is generated from GET /api/commands -- the same registry
+   that builds the CLI (meshalign --help), so a new CLI flag shows up here. */
+const CARDS = {
+  run: [['mae_um','Surface MAE','µm'],['p95_um','p95 error','µm'],['rel_mae_pct','Rel. MAE','% of char. length'],
+        ['chamfer_mm','Chamfer','mm'],['iou','Voxel IoU','–'],['duration_s','Duration','s']],
+  register: [['rotation_deg','Rotation','°'],['translation_mm','Translation','mm'],['duration_s','Duration','s']],
+  chamfer: [['chamfer_mm','Chamfer','mm'],['duration_s','Duration','s']],
+  ensemble: [['ensemble_median_um','Median DFT','µm'],['ensemble_mad_um','MAD','µm'],
+             ['n_outliers','Outliers','meshes'],['duration_s','Duration','s']],
+  batch: [['n_ok','Pairs OK','–'],['n_pairs','Pairs','–'],['mean_mae_um','Mean MAE','µm'],['duration_s','Duration','s']],
+};
+CARDS.measure = CARDS.run;
+const RUN_LABEL = {run:'Run', measure:'Measure', register:'Register', chamfer:'Compute Chamfer',
+                   ensemble:'Run ensemble', batch:'Run batch'};
+const ADV_OPEN_KEY = 'meshalign.advOpen';
+
+function esc(s){ return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function cmdSpec(c = state.command){ return state.commands[c]; }
+function legacyCommand(params){
+  if (params?.command) return params.command;
+  return params?.use_icp === false ? 'measure' : 'run';
+}
+function runLabel(p){
+  const b = k => String(p?.[k] ?? '').split('/').pop();
+  const c = legacyCommand(p);
+  if (['run','measure','register'].includes(c)) return `${b('ref')} → ${b('test')}`;
+  if (c === 'chamfer') return `${b('a')} ↔ ${b('b')}`;
+  if (c === 'ensemble') return `${(p.meshes||[]).length} meshes`;
+  if (c === 'batch') return `${p.refs} vs ${p.tests}`;
+  return c;
+}
+
+function renderCards(command){
+  const defs = CARDS[command] || CARDS.run;
+  $('#metrics').innerHTML = defs.map(([k,label,unit]) =>
+    `<div class="card"><span class="label">${esc(label)}</span>` +
+    `<span class="value" data-testid="metric-${k}">–</span><span class="unit">${esc(unit)}</span></div>`).join('');
+}
+
+function renderCmdBar(){
+  $('#cmdbar').innerHTML = Object.entries(state.commands).map(([name, c]) =>
+    `<button class="btn ${name === state.command ? 'active' : ''}" data-cmd="${name}" ` +
+    `data-testid="cmd-${name}" title="${esc(c.summary)}" type="button">${esc(c.title)}</button>`).join('');
+  $$('#cmdbar button').forEach(b => b.addEventListener('click', () => setCommand(b.dataset.cmd)));
+}
+
+function datasetOptions(){
+  return '<option value="">— select —</option>' + state.datasets.map(d =>
+    `<option value="${esc(d.id)}">${esc(d.name)} · ${esc(d.kind)} · ${fmtBytes(d.size_bytes)}</option>`).join('');
+}
+function groupOptions(){
+  return '<option value="">— select a folder —</option>' + state.groups.map(g =>
+    `<option value="${esc(g.id)}">${esc(g.id)} (${g.n_files} files)</option>`).join('');
+}
+
+function fieldHtml(p){
+  const id = 'p-' + p.name, tid = `param-${p.name}`;
+  const label = p.name.replace(/_/g, ' ');
+  const help = `<span class="helper">${esc(p.help)}${p.default != null && p.type !== 'bool' && p.type !== 'enum' ? ' · default ' + esc(p.default) : ''}</span>`;
+  const err = '<span class="error"></span>';
+  let ctl = '';
+  switch (p.type){
+    case 'dataset':
+      ctl = `<div class="row"><select id="${id}" data-testid="${tid}"></select>` +
+        `<input type="file" id="upload-${p.name}" accept=".stl,.obj,.ply,.pcd,.xyz,.pts,.asc,.txt" hidden>` +
+        `<button class="btn" type="button" id="upload-${p.name}-btn" data-testid="upload-${p.name}-button" title="Upload a file to use as ${esc(label)}">Upload…</button></div>`;
+      break;
+    case 'datasets':
+      ctl = `<div class="checklist" id="${id}" data-testid="${tid}"></div>` +
+        `<input type="file" id="upload-${p.name}" accept=".stl,.obj,.ply,.pcd,.xyz,.pts,.asc,.txt" multiple hidden>` +
+        `<button class="btn" type="button" id="upload-${p.name}-btn" data-testid="upload-${p.name}-button">Upload meshes…</button>`;
+      break;
+    case 'group':
+      ctl = `<select id="${id}" data-testid="${tid}"></select>` +
+        `<div class="row uprow"><input type="text" id="folder-${p.name}" placeholder="new folder name" ` +
+        `data-testid="folder-${p.name}" maxlength="40">` +
+        `<input type="file" id="upload-${p.name}" accept=".stl,.obj,.ply,.pcd,.xyz,.pts,.asc,.txt" multiple hidden>` +
+        `<button class="btn" type="button" id="upload-${p.name}-btn" data-testid="upload-${p.name}-button">Upload files…</button></div>`;
+      break;
+    case 'bool':
+      if (p.default === null || p.default === undefined){
+        return `<div class="field" data-param="${p.name}"><label for="${id}">${esc(label)}</label>` +
+          `<select id="${id}" data-testid="${tid}"><option value="">per mode (default)</option>` +
+          `<option value="true">on</option><option value="false">off</option></select>${help}${err}</div>`;
+      }
+      return `<div class="field" data-param="${p.name}"><label class="check"><input type="checkbox" id="${id}" data-testid="${tid}">` +
+        `${esc(label)}</label>${help}${err}</div>`;
+    case 'enum':
+      ctl = `<select id="${id}" data-testid="${tid}">` +
+        p.choices.map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join('') + '</select>';
+      break;
+    case 'int': case 'float':
+      ctl = `<input type="number" id="${id}" data-testid="${tid}" ` +
+        `${p.min != null ? `min="${p.min}"` : ''} ${p.max != null ? `max="${p.max}"` : ''} ` +
+        `step="${p.type === 'int' ? 1 : 'any'}" placeholder="${p.default == null ? 'auto' : ''}">`;
+      break;
+    default:
+      ctl = `<input type="text" id="${id}" data-testid="${tid}">`;
+  }
+  return `<div class="field" data-param="${p.name}"><label for="${id}">${esc(label)}${p.required ? ' *' : ''}</label>${ctl}${help}${err}</div>`;
+}
+
+function renderForm(){
+  const spec = cmdSpec();
+  const basic = spec.params.filter(p => !p.advanced);
+  const adv = spec.params.filter(p => p.advanced);
+  let html = `<div class="cmd-summary" data-testid="cmd-summary">${esc(spec.summary)}</div>` +
+    `<fieldset class="section">${basic.map(fieldHtml).join('')}</fieldset>`;
+  if (adv.length){
+    let open = false; try { open = localStorage.getItem(ADV_OPEN_KEY) === '1'; } catch(e){}
+    html += `<details class="section adv" id="adv" data-testid="advanced" ${open ? 'open' : ''}>` +
+      `<summary>Advanced options</summary>${adv.map(fieldHtml).join('')}</details>`;
+  }
+  $('#form').innerHTML = html;
+  const advEl = $('#adv');
+  if (advEl) advEl.addEventListener('toggle', () => { try { localStorage.setItem(ADV_OPEN_KEY, advEl.open ? '1' : '0'); } catch(e){} });
+  refreshChoices();
+  bindForm();
+}
+
+/* (re)populate dataset / group controls without losing the selection */
+function refreshChoices(){
+  const spec = cmdSpec(); if (!spec) return;
+  for (const p of spec.params){
+    const el = $('#p-' + p.name); if (!el) continue;
+    if (p.type === 'dataset'){
+      const cur = el.value; el.innerHTML = datasetOptions();
+      if ([...el.options].some(o => o.value === cur)) el.value = cur;
+    } else if (p.type === 'group'){
+      const cur = el.value; el.innerHTML = groupOptions();
+      if ([...el.options].some(o => o.value === cur)) el.value = cur;
+    } else if (p.type === 'datasets'){
+      const checked = new Set($$('input:checked', el).map(i => i.value));
+      el.innerHTML = state.datasets.map(d =>
+        `<label class="check"><input type="checkbox" value="${esc(d.id)}" ${checked.has(d.id) ? 'checked' : ''}>` +
+        `${esc(d.id)} <span class="muted">${esc(d.kind)} · ${fmtBytes(d.size_bytes)}</span></label>`).join('') ||
+        '<span class="helper">no datasets yet — upload some</span>';
+    }
+  }
+}
+
+function setControl(p, v){
+  const el = $('#p-' + p.name); if (!el) return;
+  if (v === undefined) v = p.default;
+  switch (p.type){
+    case 'bool':
+      if (el.type === 'checkbox') el.checked = v === true; else el.value = v == null ? '' : String(v);
+      break;
+    case 'datasets': {
+      const s = new Set(v || []); $$('input', el).forEach(i => i.checked = s.has(i.value)); break; }
+    case 'dataset': case 'group':
+      if (v && ![...el.options].some(o => o.value === v)) el.insertAdjacentHTML('beforeend', `<option value="${esc(v)}">${esc(v)} (missing)</option>`);
+      el.value = v ?? ''; break;
+    default: el.value = v ?? '';
+  }
+}
+function fillForm(params = {}){
+  for (const p of cmdSpec().params) setControl(p, params[p.name]);
+  validateParams();
+}
+function resetForm(){ fillForm({}); }
+
+function paramsFromForm(){
+  const out = {};
+  for (const p of cmdSpec().params){
+    const el = $('#p-' + p.name); if (!el) continue;
+    let v;
+    switch (p.type){
+      case 'bool':
+        v = el.type === 'checkbox' ? el.checked : (el.value === '' ? null : el.value === 'true'); break;
+      case 'datasets': v = $$('input:checked', el).map(i => i.value); break;
+      case 'int': v = el.value === '' ? null : parseInt(el.value, 10); break;
+      case 'float': v = el.value === '' ? null : parseFloat(el.value); break;
+      default: v = el.value === '' ? null : el.value;
+    }
+    if (v !== null) out[p.name] = v;
+  }
+  return out;
+}
+
+function validateParams(){
+  const spec = cmdSpec(); if (!spec) return false;
+  const vals = paramsFromForm();
+  let ok = true;
+  for (const p of spec.params){
+    const field = $(`[data-param="${p.name}"]`); if (!field) continue;
+    const v = vals[p.name]; let msg = '';
+    if (p.required && (v == null || (Array.isArray(v) && !v.length)))
+      msg = p.type === 'datasets' ? `select at least ${p.min_items || 1}` : (p.type === 'group' ? 'select a folder' : `select a ${p.name.replace(/_/g,' ')}`);
+    else if (p.type === 'datasets' && v && v.length < (p.min_items || 1)) msg = `select at least ${p.min_items}`;
+    else if ((p.type === 'int' || p.type === 'float') && field.querySelector('input')){
+      const raw = field.querySelector('input').value;
+      if (raw !== '' && (!Number.isFinite(Number(raw)) || (p.type === 'int' && !Number.isInteger(Number(raw)))))
+        msg = `${p.name.replace(/_/g,' ')} must be ${p.type === 'int' ? 'an integer' : 'a number'}`;
+      else if (raw !== '' && p.min != null && Number(raw) < p.min) msg = `must be ≥ ${p.min}`;
+      else if (raw !== '' && p.max != null && Number(raw) > p.max) msg = `must be ≤ ${p.max}`;
+    }
+    field.classList.toggle('invalid', !!msg);
+    const e = field.querySelector('.error'); if (e) e.textContent = msg;
+    if (msg) ok = false;
+  }
+  if (state.activeRun) ok = false;
+  $('#run-btn').disabled = !ok;
+  updateCli();
+  return ok;
+}
+
+/* ---- the CLI equivalent of the current form (CLI/web parity, copyable) ---- */
+function dsPath(id){ return id.startsWith('uploads/') ? 'webapp/uploads/' + id.slice(8) : 'data/' + id; }
+function shq(s){ return /^[\w@%+=:,./-]+$/.test(s) ? s : `"${String(s).replace(/"/g, '\\"')}"`; }
+function cliString(command, params){
+  const spec = cmdSpec(command); if (!spec) return '';
+  const parts = ['meshalign', command];
+  const flag = n => '--' + n.replace(/_/g, '-');
+  const val = (p, v) => (p.type === 'dataset' || p.type === 'group') ? dsPath(v) : v;
+  for (const p of spec.params.filter(p => p.positional)){
+    const v = params[p.name]; if (v == null) continue;
+    (Array.isArray(v) ? v : [v]).forEach(x => parts.push(shq(dsPath(x))));
+  }
+  for (const p of spec.params.filter(p => !p.positional)){
+    const v = params[p.name];
+    if (p.type === 'bool'){
+      if (v == null) continue;
+      if (p.default === false){ if (v) parts.push(flag(p.name)); }
+      else if (p.default === true){ if (!v) parts.push('--no-' + p.name.replace(/_/g, '-')); }
+      else parts.push(v ? flag(p.name) : '--no-' + p.name.replace(/_/g, '-'));
+    } else if (p.type === 'enum' && p.name === 'path'){
+      if (v && v !== 'auto') parts.push('--' + v);
+    } else if (v != null && (p.required || v !== p.default)){
+      parts.push(flag(p.name), shq(String(val(p, v))));
+    }
+  }
+  if (['run','measure','batch'].includes(command)) parts.push('--out', 'OUT_DIR');
+  return parts.join(' ');
+}
+function updateCli(){
+  const el = $('#cli-line'); if (!el || !cmdSpec()) return;
+  el.textContent = cliString(state.command, paramsFromForm());
+}
+
+function bindForm(){
+  const spec = cmdSpec();
+  $('#form').oninput = $('#form').onchange = validateParams;
+  for (const p of spec.params){
+    const btn = $(`#upload-${p.name}-btn`); if (!btn) continue;
+    const fi = $(`#upload-${p.name}`);
+    btn.addEventListener('click', () => fi.click());
+    fi.addEventListener('change', async e => {
+      const files = [...e.target.files]; e.target.value = '';
+      if (files.length) await uploadFiles(files, p);
+    });
+  }
+}
+
+/* ---------------- datasets ---------------- */
+async function loadDatasets(){
+  try{
+    state.datasets = await api('/api/datasets');
+  }catch(e){ toast('Failed to list datasets: ' + e.message, true); }
+}
+async function loadCommands(){
+  const body = await api('/api/commands');
+  state.commands = body.commands; state.groups = body.groups;
+}
+
+async function uploadFiles(files, p){
+  const folderEl = $(`#folder-${p.name}`);
+  const folder = folderEl ? folderEl.value.trim() : '';
+  if (p.type === 'group' && !folder){ toast('Type a folder name first', true); return; }
+  $('#spinner').classList.add('on');
+  const rows = [];
+  try{
+    for (const file of files){
+      $('#spinner-text').textContent = `uploading ${file.name} (${fmtBytes(file.size)})…`;
+      const fd = new FormData();
+      fd.append('file', file, file.name);
+      if (p.type === 'group') fd.append('folder', folder);
+      rows.push(await api('/api/datasets/upload', {method:'POST', body: fd}));
+    }
+    toast(`Uploaded ${rows.length} file${rows.length > 1 ? 's' : ''}`);
+    await Promise.all([loadDatasets(), loadCommands()]);
+    refreshChoices();
+    if (p.type === 'dataset') setControl(p, rows[0].id);
+    else if (p.type === 'group') setControl(p, rows[0].group);
+    else { const el = $('#p-' + p.name); rows.forEach(r => { const i = $$('input', el).find(x => x.value === r.id); if (i) i.checked = true; }); }
+    validateParams();
+  }catch(e){ toast('Upload failed: ' + e.message, true); }
+  finally { $('#spinner').classList.remove('on'); }
+}
+
+function setCommand(name, params){
+  if (!state.commands[name]) name = 'run';
+  const changed = name !== state.command;
+  if (changed && state.command) state.values[state.command] = paramsFromForm();
+  state.command = name;
+  if (changed || !$('#form').children.length){
+    renderCmdBar(); renderForm(); renderCards(name);
+    $('#run-btn').textContent = state.activeRun ? 'Running…' : RUN_LABEL[name];
+    $('#empty-3d').innerHTML = cmdSpec().viewer
+      ? '<b>No result yet</b><span>Pick inputs on the left, then press ' + esc(RUN_LABEL[name]) + '.<br>The aligned pair appears here, colored by signed surface error.</span>'
+      : '<b>No 3D view for this command</b><span>Results appear in the Table tab.</span>';
+  }
+  fillForm(params ?? state.values[name] ?? {});
+}
+
+/* ---------------- runs ---------------- */
+async function startRun(){
+  if (!validateParams()) return;
+  const params = paramsFromForm();
+  try{
+    const res = await api('/api/runs', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({command: state.command, params, client_token: 'ui-' + Date.now()}),
+    });
+    state.activeRun = res.run_id;
+    state.runId = res.run_id;
+    state.runCommand = state.command;
+    writeQS(false);
+    watchRun(res.run_id);
+    refreshHistory();
+  }catch(e){
+    if (e.code === 'run_active'){
+      toast('Another run is already active — showing it', true);
+      state.activeRun = e.message.match(/[0-9-]+/) ? e.message.match(/[0-9-]+/)[0] : null;
+    } else toast('Start failed: ' + e.message, true);
+  }
+}
+
+async function finishRun(done){
+  state.activeRun = null;
+  const st = done.status;
+  setStatus(st, st === 'succeeded' ? `Succeeded · ${fmt(done.duration_s,1)} s` : st);
+  $('#progressfill').style.width = st === 'succeeded' ? '100%' : $('#progressfill').style.width;
+  try{
+    const rec = await api(`/api/runs/${state.runId}`);
+    applyRunRecord(rec);
+    if (st === 'succeeded') await showResult(rec);
+    else if (st === 'failed') toast('Run failed: ' + (rec.message || 'unknown error'), true);
+  }catch(e){ /* record fetch issues surface in history */ }
+  refreshHistory();
+}
+
+/* viewer commands load the 3D payload; the rest land on the Table tab */
+async function showResult(rec){
+  state.rec = rec;
+  const cmd = legacyCommand(rec.params);
+  if (state.commands[cmd]?.viewer){
+    await loadView(rec.run_id);
+  } else {
+    state.view = null;
+    $('#empty-3d').style.display = 'flex';
+    $('#empty-hist').style.display = 'flex';
+    $('#empty-table').style.display = 'none';
+    setTab('table');
+  }
+}
+
+async function loadRun(runId){
+  if (!runId){ state.runId = null; state.view = null; state.rec = null; clearResults(); writeQS(); return; }
+  state.runId = runId;
+  writeQS();
+  clearResults();
+  setStatus('queued', 'Loading');
+  try{
+    const rec = await api(`/api/runs/${runId}`);
+    applyRunRecord(rec);
+    if (rec.status === 'running'){
+      state.activeRun = runId; state.runStartWall = performance.now() - (rec.duration_s||0)*1000;
+      watchRun(runId);
+    } else if (rec.status === 'succeeded'){
+      await showResult(rec);
+      setStatus(rec.status, `Succeeded · ${fmt(rec.duration_s,1)} s`);
+    } else {
+      setStatus(rec.status, rec.message || rec.status);
+    }
+  }catch(e){
+    setStatus('idle');
+    toast('Failed to load run: ' + e.message, true);
+  }
+}
+
+function applyRunRecord(rec){
+  state.rec = rec;
+  const cmd = legacyCommand(rec.params);
+  $('#context-label').textContent = `${cmd} · ${runLabel(rec.params || {})} · ${rec.run_id}`;
+  // show the run's own command + params in the form (provenance; Re-run uses it)
+  if (rec.params && state.commands[cmd]) setCommand(cmd, rec.params);
+  const m = rec.metrics || {};
+  for (const [k] of (CARDS[cmd] || CARDS.run)) setMetricCard(k, k === 'duration_s' ? (m.duration_s ?? rec.duration_s) : m[k]);
+  if (rec.status === 'failed' && rec.message) showFailedBanner(rec);
+}
+
+function setMetricCard(name, value){
+  const el = $(`[data-testid="metric-${name}"]`);
+  if (!el) return;
+  if (value == null || Number.isNaN(value)){ el.textContent = '–'; return; }
+  const ints = ['n_ok','n_pairs','n_outliers'];
+  const digits = ints.includes(name) ? 0 : name.includes('pct') ? 4 : (name === 'iou' ? 3 : (name === 'chamfer_mm' || name === 'rotation_deg' || name === 'translation_mm' ? 3 : 1));
+  el.textContent = Number(value).toFixed(digits);
+}
+
+async function stopRun(){
+  if (!state.activeRun) return;
+  try{
+    await api(`/api/runs/${state.activeRun}/cancel`, {method:'POST'});
+  }catch(e){ toast('Cancel failed: ' + e.message, true); }
+}
+
+function watchRun(runId){
+  if (state.es){ state.es.close(); state.es = null; }
+  clearLog();
+  setStatus('running', 'Running');
+  state.runStartWall = performance.now();
+  $('#elapsed').textContent = '0.0 s';
+  const es = new EventSource(`/api/runs/${runId}/events`);
+  state.es = es;
+  es.addEventListener('status', ev => {
+    const d = JSON.parse(ev.data);
+    if (d.status === 'running') setStatus('running', d.message || 'Running');
+    else if (d.status === 'queued') setStatus('queued');
+  });
+  es.addEventListener('progress', ev => {
+    const d = JSON.parse(ev.data);
+    $('#progressfill').style.width = Math.round((d.progress||0)*100) + '%';
+    if (state.runStartWall)
+      $('#elapsed').textContent = ((performance.now()-state.runStartWall)/1000).toFixed(1) + ' s';
+  });
+  es.addEventListener('log', ev => {
+    const d = JSON.parse(ev.data);
+    appendLog(d.level || 'INFO', d.msg || '');
+  });
+  es.addEventListener('metric', ev => {
+    const d = JSON.parse(ev.data);
+    setMetricCard(d.name, d.value);
+  });
+  es.addEventListener('done', async ev => {
+    es.close(); state.es = null;
+    const d = JSON.parse(ev.data);
+    finishRun(d);
+  });
+  es.onerror = () => { /* EventSource retries; health polling below is the backstop */ };
+}
+
+
+
+async function loadView(runId){
+  $('#empty-3d').style.display = 'none';
+  $('#empty-hist').style.display = 'none';
+  $('#empty-table').style.display = 'none';
+  $('#spinner').classList.add('on');
+  $('#spinner-text').textContent = 'loading viewer data…';
+  try{
+    state.view = await api(`/api/runs/${runId}/view`);
+    await render3D();
+    if (state.tab === 'histogram') renderHistogram();
+    if (state.tab === 'table') renderTable();
+  }catch(e){
+    toast('Viewer data unavailable: ' + e.message, true);
+    $('#empty-3d').style.display = 'flex';
+  }finally{
+    $('#spinner').classList.remove('on');
+  }
+}
+
+
+
+function clearResults(){
+  $('#context-label').textContent = 'no run selected';
+  $$('#metrics .value').forEach(el => el.textContent = '–');
+  $('#empty-3d').style.display = 'flex';
+  $('#empty-hist').style.display = 'flex';
+  $('#empty-table').style.display = 'flex';
+  $('#table-content').innerHTML = '';
+  if (state.viewer) state.viewer.clear();
+  Plotly.purge('hist-plot');
+}
+
+function showFailedBanner(rec){
+  const c = $('#table-content');
+  c.innerHTML = `
+    <div class="error-box" data-testid="run-error">
+      <b>Run failed</b>
+      <span>${rec.message || 'unknown error'}</span>
+      <span>Try: check the input files are valid meshes, or switch mode to default.</span>
+      <details class="traceback"><summary>Log tail</summary>
+        <pre>see the log console below for the full traceback</pre></details>
+    </div>` + c.innerHTML;
+}
+
+/* ---------------- history ---------------- */
+function historyMetric(r){
+  const m = r.key_metrics || {};
+  if (m.mae_um != null) return fmt(m.mae_um, 0) + ' µm';
+  if (m.chamfer_mm != null) return fmt(m.chamfer_mm, 3) + ' mm';
+  if (m.rotation_deg != null) return fmt(m.rotation_deg, 2) + '°';
+  if (m.n_ok != null) return `${m.n_ok}/${m.n_pairs} ok`;
+  if (m.ensemble_median_um != null) return fmt(m.ensemble_median_um, 0) + ' µm';
+  return '';
+}
+async function refreshHistory(){
+  try{
+    const runs = await api('/api/runs?limit=30');
+    const list = $('#history-list');
+    list.innerHTML = runs.map(r => `
+      <div class="runrow ${r.run_id === state.runId ? 'selected' : ''}" data-run="${r.run_id}" data-testid="run-row">
+        <div class="r1">
+          <label style="display:flex;align-items:center;gap:4px;min-width:0">
+            <input type="checkbox" data-compare="${r.run_id}" ${state.compare.has(r.run_id)?'checked':''}>
+            <span class="id">${r.run_id}</span>
+          </label>
+          <span class="pill" data-state="${r.status}"><span class="dot"></span>${r.status}</span>
+        </div>
+        <div class="r2">
+          <span title="${esc(r.key_params?.label || '')}"><span class="cmdtag">${esc(r.key_params?.command || 'run')}</span>${esc(r.key_params?.label || '')}</span>
+          <span class="num">${historyMetric(r)}</span>
+          <span class="num">${r.duration_s != null ? fmt(r.duration_s,1) + ' s' : ''}</span>
+        </div>
+      </div>`).join('') || '<div class="empty" style="position:static;padding:20px 0">No runs yet. Press Run.</div>';
+    $$('#history-list .runrow').forEach(row => {
+      row.addEventListener('click', ev => {
+        if (ev.target.type === 'checkbox') return;
+        loadRun(row.dataset.run);
+      });
+    });
+    $$('#history-list input[data-compare]').forEach(cb => {
+      cb.addEventListener('change', () => {
+        if (cb.checked) state.compare.add(cb.dataset.compare);
+        else state.compare.delete(cb.dataset.compare);
+        $('#compare-btn').style.display = state.compare.size >= 2 ? 'block' : 'none';
+      });
+    });
+    // selected row highlight
+    $$('#history-list .runrow').forEach(row =>
+      row.classList.toggle('selected', row.dataset.run === state.runId));
+  }catch(e){ /* history is non-critical */ }
+}
+
+async function compareSelected(){
+  const ids = [...state.compare].slice(0, 4);
+  if (ids.length < 2) return;
+  const recs = [];
+  for (const id of ids){
+    try { recs.push(await api(`/api/runs/${id}`)); } catch(e){}
+  }
+  const fields = [['mae_um','Surface MAE (µm)'],['p95_um','p95 (µm)'],['rel_mae_pct','Rel. MAE (%)'],
+                  ['chamfer_mm','Chamfer (mm)'],['iou','Voxel IoU'],['duration_s','Duration (s)']];
+  let html = `<div class="panel"><h2>Compare ${recs.length} runs</h2>
+    <div class="sub">Deltas are vs. the first selected run; green = better (lower error / higher IoU)</div>
+    <div class="tablewrap"><table class="grid"><thead><tr><th>Metric</th>`;
+  html += recs.map(r => `<th>${r.run_id.slice(11)}</th>`).join('') + '</tr></thead><tbody>';
+  for (const [key, label] of fields){
+    html += `<tr><td>${label}</td>`;
+    const base = recs[0].metrics?.[key];
+    recs.forEach((r, i) => {
+      const v = r.metrics?.[key];
+      let cell = v == null ? '–' : Number(v).toFixed(key==='iou'?3:(key==='rel_mae_pct'?3:1));
+      if (i > 0 && v != null && base != null){
+        const better = (key === 'iou') ? v > base : v < base;
+        const same = Math.abs(v - base) < 1e-9;
+        cell += ` <span style="color:${same?'var(--text-muted)':better?'var(--success)':'var(--danger)'}">` +
+                 `${v>=base?'+':''}${(v-base).toFixed(key==='iou'?3:1)}</span>`;
+      }
+      html += `<td class="num">${cell}</td>`;
+    });
+    html += '</tr>';
+  }
+  html += '</tbody></table></div></div>';
+  setTab('table');
+  $('#table-content').innerHTML = html + $('#table-content').innerHTML;
+}
+
+/* ---------------- log console ---------------- */
+let logAutoScroll = true;
+function appendLog(level, msg){
+  const body = $('#logbody');
+  const nearBottom = body.scrollHeight - body.scrollTop - body.clientHeight < 40;
+  const line = document.createElement('div');
+  line.className = level;
+  line.textContent = `[${nowUTC()}] ${msg}`;
+  body.appendChild(line);
+  while (body.childElementCount > 2000) body.firstChild.remove();
+  if (logAutoScroll || nearBottom) body.scrollTop = body.scrollHeight;
+}
+function clearLog(){ $('#logbody').innerHTML = ''; }
+
+$('#logbody').addEventListener('scroll', () => {
+  const body = $('#logbody');
+  logAutoScroll = body.scrollHeight - body.scrollTop - body.clientHeight < 40;
+});
+
+/* ============================================================
+   Histogram tab
+   ============================================================ */
+async function renderHistogram(){
+  const pane = $('#pane-histogram');
+  if (!state.view?.view?.hist){
+    $('#empty-hist').style.display = 'flex';
+    $('#empty-hist').innerHTML = state.rec && state.rec.status === 'succeeded'
+      ? '<b>No error histogram</b><span>This run has none (register-only, or histogram turned off).</span>'
+      : '<b>No result yet</b><span>Run an alignment to see the error distribution.</span>';
+    return;
+  }
+  $('#empty-hist').style.display = 'none';
+  try{
+    const hist = await api(`/api/runs/${state.runId}/artifacts/viewer/hist.json`);
+    const edges = hist.edges, counts = hist.counts;
+    const widths = edges.slice(1).map((e,i) => e - edges[i]);
+    const mids = edges.slice(0,-1).map((e,i) => (e + edges[i+1])/2);
+    Plotly.newPlot('hist-plot', [{
+      x: mids.map(x => x*1000), y: counts, type: 'bar', width: widths.map(w => w*1000),
+      marker: {color: '#71717A'}, name: 'signed error',
+    }], {
+      paper_bgcolor:'#FFFFFF', plot_bgcolor:'#FFFFFF',
+      font: {family:'Geist, system-ui, sans-serif', size:12, color:'#566A7E'},
+      margin: {l:64, r:16, t:36, b:48},
+      title: {text: 'Signed surface error distribution (ref vertices)', font:{size:13, color:'#09090B'}},
+      xaxis: {title: {text: 'Signed error (µm)'}, gridcolor:'#D7E1EC', zerolinecolor:'#D7E1EC'},
+      yaxis: {title: {text: 'Count'}, gridcolor:'#D7E1EC'},
+      bargap: 0, showlegend: false,
+    }, {displayModeBar:false, responsive:true});
+  }catch(e){
+    $('#empty-hist').style.display = 'flex';
+    $('#empty-hist').innerHTML = `<b>Histogram unavailable</b><span>${e.message}</span>`;
+  }
+}
+
+/* ============================================================
+   Table tab
+   ============================================================ */
+async function renderTable(){
+  const rec = state.rec;
+  if (!rec || rec.status !== 'succeeded'){
+    if (!rec) $('#empty-table').style.display = 'flex';
+    return;
+  }
+  $('#empty-table').style.display = 'none';
+  const v = state.view;                       // viewer payload (run/measure/register)
+  const cmd = legacyCommand(rec.params);
+  const p = rec.params || {};
+  const row = (k, val) => `<tr><td>${esc(k)}</td><td class="num" style="text-align:left">${val ?? '–'}</td></tr>`;
+  const prov = [
+    ['Command', esc(cmd)],
+    ['Run ID', esc(rec.run_id)],
+    ['Params hash', esc(rec.params_hash)],
+    ['Seed', esc(p.seed ?? rec.seed)],
+    ['Inputs', esc(runLabel(p))],
+  ];
+  if (v){
+    prov.splice(3, 0, ['meshalign', esc((v.meshalign_version || '') + (v.git_commit ? ' · ' + String(v.git_commit).slice(0,10) : ''))]);
+    prov.push(['Geometry', `${v.inputs?.ref?.n_points?.toLocaleString() ?? '–'} ref verts · ${v.inputs?.test?.n_points?.toLocaleString() ?? '–'} test verts`]);
+    prov.push(['Duration', v.timings_s ? `${fmt(v.timings_s.total,1)} s` + (v.timings_s.register != null ? ` (register ${fmt(v.timings_s.register,1)} s, measure ${fmt(v.timings_s.measure,1)} s)` : '') : '–']);
+  } else prov.push(['Duration', `${fmt(rec.duration_s, 1)} s`]);
+  let html = `<div class="panel"><h2>Provenance</h2><div class="sub">Exact inputs that produced this result</div>
+    <table class="grid"><tbody>${prov.map(r => row(r[0], r[1])).join('')}</tbody></table>
+    <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
+      <button class="btn" id="copy-params" data-testid="copy-params">Copy params as JSON</button>
+      <button class="btn" id="copy-cli" data-testid="copy-cli">Copy CLI command</button>
+      <button class="btn" id="rerun" data-testid="rerun-button">Re-run with these params</button>
+      <button class="btn" id="export-run" data-testid="export-button">Export run (zip)</button>
+    </div>
+    <pre class="cli" data-testid="cli-equivalent">${esc(cliString(cmd, p))}</pre></div>`;
+
+  // ---- per-command result panels ----
+  const res = rec.result;
+  if (cmd === 'chamfer' && res){
+    html += `<div class="panel"><h2>Chamfer distance</h2><div class="sub">Symmetric mean nearest-neighbour distance (lower = closer)</div>
+      <table class="grid"><tbody>${row('Chamfer', `<b>${Number(res.chamfer).toFixed(6)}</b> mm`)}</tbody></table></div>`;
+  }
+  if (cmd === 'ensemble' && res){
+    html += `<div class="panel"><h2>Ensemble consistency</h2>
+      <div class="sub">Distance of each candidate to the hub (${esc(String(res.hub || '').split(/[\\/]/).pop())}); outliers are &gt;3 MAD from the median.
+      Median ${fmt(res.median_um,1)} µm · MAD ${fmt(res.mad_um,1)} µm</div>
+      <div class="tablewrap"><table class="grid"><thead><tr><th>Mesh</th><th>Hub</th><th>DFT (µm)</th><th>Rotation (°)</th><th>Outlier</th></tr></thead><tbody>` +
+      res.rows.map(r => `<tr><td>${esc(String(r.mesh).split(/[\\/]/).pop())}</td><td>${r.is_hub ? '★' : ''}</td>
+        <td class="num">${fmt(r.ensemble_dft_um,1)}</td><td class="num">${fmt(r.rotation_deg,2)}</td>
+        <td style="color:${r.ensemble_outlier ? 'var(--danger)' : 'inherit'}">${r.ensemble_outlier ? 'yes' : ''}</td></tr>`).join('') +
+      `</tbody></table></div></div>`;
+  }
+  if (cmd === 'batch' && res){
+    html += `<div class="panel"><h2>Batch results</h2><div class="sub">${res.n_ok}/${res.n_pairs} pairs succeeded</div>
+      <div class="tablewrap"><table class="grid" data-testid="batch-table"><thead><tr><th>Test</th><th>MAE (µm)</th><th>p95 (µm)</th><th>Status</th></tr></thead><tbody>` +
+      res.results.map(r => `<tr><td>${esc(String(r.test).split(/[\\/]/).pop())}</td>
+        <td class="num">${r.ok ? fmt(r.mae_um,1) : '–'}</td><td class="num">${r.ok ? fmt(r.p95_um,1) : '–'}</td>
+        <td style="color:${r.ok ? 'var(--success)' : 'var(--danger)'}">${r.ok ? 'ok' : esc(r.error)}</td></tr>`).join('') +
+      `</tbody></table></div></div>`;
+  }
+  if (cmd === 'register' && v){
+    const h = v.headline || {};
+    html += `<div class="panel"><h2>Registration</h2><table class="grid"><tbody>
+      ${row('Rotation', `${fmt(h.rotation_deg, 3)} °`)}${row('Translation', `${fmt(h.translation_mm, 3)} mm`)}</tbody></table></div>`;
+  }
+
+  // ---- headline + bundle (run/measure) ----
+  if (v && cmd !== 'register'){
+    const h = v.headline || {};
+    html += `<div class="panel"><h2>Headline metrics</h2>
+      <table class="grid"><thead><tr><th>Metric</th><th>Value</th><th>Unit</th></tr></thead><tbody>
+      <tr><td>Surface DFT MAE</td><td class="num">${fmt(h.mae_um,1)}</td><td>µm</td></tr>
+      <tr><td>Surface DFT p95</td><td class="num">${fmt(h.p95_um,1)}</td><td>µm</td></tr>
+      <tr><td>Characteristic length</td><td class="num">${fmt((h.char_length_um||0)/1000,1)}</td><td>mm</td></tr>
+      <tr><td>Relative MAE</td><td class="num">${fmt(h.rel_mae_pct,3)}</td><td>%</td></tr>
+      <tr><td>Relative p95</td><td class="num">${fmt(h.rel_p95_pct,3)}</td><td>%</td></tr>
+      </tbody></table></div>`;
+    const b = v.metrics_bundle || {};
+    const bundleRows = [
+      ['Chamfer', b.chamfer_mm, 'mm'], ['Hausdorff p95', b.hausdorff95_um, 'µm'],
+      ['Hausdorff max', b.hausdorff_max_um, 'µm'],
+      ['Normal consistency', b.normal_consistency, '–'],
+      ['Voxel Dice', b.dice, '–'], ['Voxel IoU', b.iou, '–']];
+    html += `<div class="panel"><h2>Metrics bundle</h2>
+      <div class="sub">${Object.keys(b).length ? 'Computed on the aligned pair (voxel metrics need watertight meshes)' : 'Not computed for this run (enable “metrics”)'}</div>
+      <table class="grid"><tbody>` +
+      bundleRows.map(r => `<tr><td>${r[0]}</td><td class="num">${r[1]==null?'–':Number(r[1]).toFixed(3)}</td><td>${r[2]}</td></tr>`).join('') +
+      `</tbody></table></div>`;
+  }
+  const T = v?.transform_4x4;
+  if (T){
+    html += `<div class="panel"><h2>Registration transform (4×4, test ← ref frame)</h2>
+      <table class="grid"><tbody>` +
+      T.map(r => `<tr>${r.map(x => `<td class="num" style="text-align:left">${x.toFixed(4)}</td>`).join('')}</tr>`).join('') +
+      `</tbody></table></div>`;
+  }
+
+  // ---- artifacts: every file the CLI would have written ----
+  let arts = [];
+  try { arts = await api(`/api/runs/${rec.run_id}/artifacts`); } catch(e){}
+  if (arts.length){
+    html += `<div class="panel"><h2>Artifacts</h2><div class="sub">Same files the CLI writes to its output directory</div>
+      <div class="tablewrap"><table class="grid" data-testid="artifacts"><tbody>` +
+      arts.filter(a => !a.name.startsWith('viewer/')).map(a =>
+        `<tr><td><a href="${esc(a.url)}" download>${esc(a.name)}</a></td><td class="num">${fmtBytes(a.size_bytes)}</td></tr>`).join('') +
+      `</tbody></table></div></div>`;
+  }
+
+  $('#table-content').innerHTML = html;
+  $('#copy-params').addEventListener('click', () => {
+    navigator.clipboard.writeText(JSON.stringify(paramsFromForm(), null, 1))
+      .then(() => toast('Parameters copied as JSON'));
+  });
+  $('#copy-cli').addEventListener('click', () => {
+    navigator.clipboard.writeText(cliString(cmd, p)).then(() => toast('CLI command copied'));
+  });
+  $('#rerun').addEventListener('click', () => { setCommand(cmd, p); startRun(); });
+  $('#export-run').addEventListener('click', () => {
+    const a = document.createElement('a');
+    a.href = `/api/runs/${state.runId}/export`;
+    a.download = `meshalign_run_${state.runId}.zip`;
+    document.body.appendChild(a); a.click(); a.remove();
+  });
+}
+
+/* ============================================================
+   3D viewer
+   ============================================================ */
+const RDBU = ['#67001f','#b2182b','#d6604d','#f4a582','#fddbc7','#f7f7f7',
+              '#d1e5f0','#92c5de','#4393c3','#2166ac','#053061']; // red (+) -> blue (-)
+function rdBuColor(vNorm){
+  // vNorm in [-1, 1]: +1 -> red end, -1 -> blue end, 0 -> white
+  const t = Math.max(0, Math.min(1, (1 - vNorm) / 2));  // RDBU[0] is red
+  const x = t * (RDBU.length - 1);
+  const i = Math.min(RDBU.length - 2, Math.floor(x));
+  const f = x - i;
+  const c1 = [0,1,2].map(k => parseInt(RDBU[i].slice(1 + k*2, 3 + k*2), 16));
+  const c2 = [0,1,2].map(k => parseInt(RDBU[i+1].slice(1 + k*2, 3 + k*2), 16));
+  const c = c1.map((a, k) => Math.round(a + (c2[k] - a) * f));
+  return (c[0] << 16) | (c[1] << 8) | c[2];
+}
+
+function parseBinaryPLY(buffer){
+  const bytes = new Uint8Array(buffer);
+  const headerEnd = indexOfSeq(bytes, textEncoder.encode('end_header\n'));
+  if (headerEnd < 0) throw new Error('not a PLY file (no end_header)');
+  const header = new TextDecoder().decode(bytes.slice(0, headerEnd));
+  const bodyStart = headerEnd + 'end_header\n'.length;
+  let nVertex = 0, nFace = 0, hasNormals = false;
+  for (const line of header.split('\n')){
+    const t = line.trim().split(/\s+/);
+    if (t[0] === 'element' && t[1] === 'vertex') nVertex = parseInt(t[2], 10);
+    if (t[0] === 'element' && t[1] === 'face') nFace = parseInt(t[2], 10);
+    if (t[0] === 'property' && t[2] === 'nx') hasNormals = true;
+  }
+  const vItem = 3 + (hasNormals ? 3 : 0);
+  const dv = new DataView(buffer, bodyStart);
+  const positions = new Float32Array(nVertex * 3);
+  const normals = hasNormals ? new Float32Array(nVertex * 3) : null;
+  let off = 0;
+  for (let i = 0; i < nVertex; i++){
+    positions[i*3] = dv.getFloat32(off, true);
+    positions[i*3+1] = dv.getFloat32(off+4, true);
+    positions[i*3+2] = dv.getFloat32(off+8, true);
+    if (hasNormals){
+      normals[i*3] = dv.getFloat32(off+12, true);
+      normals[i*3+1] = dv.getFloat32(off+16, true);
+      normals[i*3+2] = dv.getFloat32(off+20, true);
+    }
+    off += vItem * 4;
+  }
+  let indices = null;
+  if (nFace > 0){
+    indices = new Uint32Array(nFace * 3);
+    for (let i = 0; i < nFace; i++){
+      const cnt = dv.getUint8(off); off += 1;
+      indices[i*3] = dv.getInt32(off, true);
+      indices[i*3+1] = dv.getInt32(off+4, true);
+      indices[i*3+2] = dv.getInt32(off+8, true);
+      off += cnt * 4;
+    }
+  }
+  return { positions, normals, indices, nVertex, nFace, hasNormals };
+}
+const textEncoder = new TextEncoder();
+function indexOfSeq(hay, needle){
+  outer: for (let i = 0; i <= hay.length - needle.length; i++){
+    for (let j = 0; j < needle.length; j++)
+      if (hay[i+j] !== needle[j]) continue outer;
+    return i;
+  }
+  return -1;
+}
+
+class ThreeViewer {
+  constructor(canvas){
+    this.canvas = canvas;
+    this.renderer = new THREE.WebGLRenderer({canvas, antialias:true});
+    this.renderer.setClearColor(0xEBF1F7);
+    this.scene = new THREE.Scene();
+    this.camera = new THREE.PerspectiveCamera(50, 1, 0.01, 50000);
+    this.camera.up.set(0, 0, 1);
+    this.camera.position.set(200, -260, 180);
+    this.controls = new OrbitControls(this.camera, canvas);
+    this.controls.enableDamping = true;
+    this.scene.add(new THREE.AmbientLight(0xffffff, 0.75));
+    const dir = new THREE.DirectionalLight(0xffffff, 0.9);
+    dir.position.set(1, -1.5, 2);
+    this.scene.add(dir);
+    this.group = new THREE.Group();
+    this.scene.add(this.group);
+    // labeled axis triad
+    const triad = new THREE.Group();
+    const axes = new THREE.AxesHelper(34);
+    const axesColors = new Float32Array([
+      0xD6/255, 0x27/255, 0x28/255,  0xD6/255, 0x27/255, 0x28/255,  0,0,0,
+      0x2C/255, 0xA0/255, 0x2C/255,  0x2C/255, 0xA0/255, 0x2C/255,  0,0,0,
+      0x1F/255, 0x77/255, 0xB4/255,  0x1F/255, 0x77/255, 0xB4/255,  0,0,0,
+    ]);
+    axes.geometry.setAttribute('color', new THREE.BufferAttribute(axesColors, 3));
+    axes.material.vertexColors = true;
+    triad.add(axes);
+    const labels = [['X', '#D62728', [42,0,0]], ['Y', '#2CA02C', [0,42,0]], ['Z', '#1F77B4', [0,0,42]]];
+    for (const [txt, color, pos] of labels){
+      const spr = makeTextSprite(txt, color);
+      spr.position.set(...pos);
+      spr.scale.set(18, 18, 1);
+      triad.add(spr);
+    }
+    triad.position.set(-1000, -1000, -1000); // moved on fit
+    this.triad = triad;
+    this.scene.add(triad);
+    this.refMesh = null; this.testMesh = null;
+    this.refMode = 'wire'; this.wireframe = false; this.asPoints = false;
+    this.baseHome = null;
+    this._render();
+    new ResizeObserver(() => this.resize()).observe(canvas.parentElement);
+  }
+  _render(){ 
+    this._raf = requestAnimationFrame(() => { 
+      this.controls.update(); 
+      this.renderer.render(this.scene, this.camera); 
+      this._render(); 
+    }); 
+  }
+  resize(){
+    const parent = this.canvas.parentElement;
+    if (!parent) return;
+    const w = parent.clientWidth, h = parent.clientHeight;
+    if (w === 0 || h === 0) return;
+    this.renderer.setSize(w, h, false);
+    this.camera.aspect = w / h;
+    this.camera.updateProjectionMatrix();
+  }
+  clear(){
+    for (const obj of [...this.group.children]) this.group.remove(obj);
+    this.refMesh = this.testMesh = null;
+    this.renderer.render(this.scene, this.camera);
+  }
+  setRef(geo, colors){
+    this.refMesh = this._makeObject(geo, 0xB4B4B6, colors, colors ? 1.0 : 0.35);
+    this._rebuild();
+  }
+  setTest(geo, colors){
+    this.testMesh = this._makeObject(geo, 0x71717A, colors, 1.0);
+    this._rebuild();
+  }
+  _makeObject(parsed, flatColor, colors, opacity){
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(parsed.positions, 3));
+    if (parsed.normals) g.setAttribute('normal', new THREE.BufferAttribute(parsed.normals, 3));
+    if (parsed.indices) g.setIndex(new THREE.BufferAttribute(parsed.indices, 1));
+    if (colors){
+      g.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    }
+    const mat = new THREE.MeshLambertMaterial({
+      color: colors ? 0xffffff : flatColor,
+      vertexColors: !!colors,
+      transparent: opacity < 1, opacity, side: THREE.DoubleSide,
+      wireframe: this.wireframe && !!parsed.indices,
+    });
+    const mesh = new THREE.Mesh(g, mat);
+    mesh.userData.parsed = parsed;
+    mesh.userData.hasFaces = !!parsed.indices;
+    return mesh;
+  }
+  _rebuild(){
+    // detach only; clear() would also drop refMesh/testMesh
+    for (const obj of [...this.group.children]) this.group.remove(obj);
+    if (this.refMesh && this.refMode !== 'hidden') this.group.add(this.refMesh);
+    if (this.testMesh) this.group.add(this.testMesh);
+    this.applyRenderMode();
+  }
+  applyRenderMode(){
+    for (const m of this.group.children){
+      const hasFaces = m.userData.hasFaces;
+      const ghost = m === this.refMesh && this.refMode === 'wire';
+      m.visible = !(m === this.refMesh && this.refMode === 'hidden');
+      m.material.wireframe = (this.wireframe || ghost) && hasFaces;
+      // ghost reference: faint lines so the test heatmap stays readable
+      if (m === this.refMesh){
+        const base = m.userData.baseOpacity ??= m.material.opacity;
+        m.material.opacity = ghost && hasFaces ? 0.4 : base;
+        m.material.transparent = m.material.opacity < 1;
+        m.material.needsUpdate = true;
+      }
+      // swap between mesh and points representation
+      if (this.asPoints || !hasFaces){
+        if (m.userData.points === undefined){
+          const pts = new THREE.Points(m.geometry, new THREE.PointsMaterial({
+            color: m.material.vertexColors ? 0xffffff : m.material.color,
+            vertexColors: m.material.vertexColors, size: 2, sizeAttenuation: false,
+          }));
+          m.userData.points = pts;
+        }
+        if (!m.children.includes(m.userData.points)) m.add(m.userData.points);
+        m.material.visible = false;
+        m.userData.points.visible = true;
+      } else {
+        if (m.userData.points) m.userData.points.visible = false;
+        m.material.visible = true;
+      }
+    }
+  }
+  fit(){
+    const box = new THREE.Box3();
+    if (this.refMesh && this.refMode !== 'hidden') box.expandByObject(this.refMesh);
+    if (this.testMesh) box.expandByObject(this.testMesh);
+    if (box.isEmpty()) return;
+    const center = box.getCenter(new THREE.Vector3());
+    const size = box.getSize(new THREE.Vector3()).length();
+    const dist = size * 0.9;
+    this.camera.position.set(center.x + dist*0.55, center.y - dist*0.7, center.z + dist*0.45);
+    this.controls.target.copy(center);
+    this.camera.near = Math.max(size / 1000, 0.001);
+    this.camera.far = size * 50;
+    this.camera.updateProjectionMatrix();
+    this.triad.position.set(box.min.x - size*0.04, box.min.y - size*0.04, box.min.z - size*0.04);
+    this.triad.scale.setScalar(size * 0.011);
+    this.controls.update();
+  }
+  resetView(){
+    if (this.baseHome){
+      this.camera.position.copy(this.baseHome.pos);
+      this.controls.target.copy(this.baseHome.target);
+      this.controls.update();
+    } else this.fit();
+  }
+}
+
+function makeTextSprite(text, color){
+  const c = document.createElement('canvas');
+  c.width = c.height = 64;
+  const ctx = c.getContext('2d');
+  ctx.font = '600 44px Geist, sans-serif';
+  ctx.fillStyle = color;
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText(text, 32, 34);
+  const tex = new THREE.CanvasTexture(c);
+  const mat = new THREE.SpriteMaterial({map: tex});
+  return new THREE.Sprite(mat);
+}
+
+async function render3D(){
+  if (!state.view) return;
+  const v = state.view;
+  if (!state.viewer){
+    state.viewer = new ThreeViewer($('#three-canvas'));
+  }
+  const vw = state.viewer;
+  const [refBuf, testBuf] = await Promise.all([
+    fetch(v.view.ref.url).then(r => r.arrayBuffer()),
+    fetch(v.view.aligned.url).then(r => r.arrayBuffer()),
+  ]);
+  const refGeo = parseBinaryPLY(refBuf);
+  const testGeo = parseBinaryPLY(testBuf);
+
+  // errors attach to a specific side; color exactly that side
+  // (mesh/mesh: both exist -> color the aligned test by default;
+  //  mesh/cloud: errors_test; cloud/mesh: errors_ref)
+  let colors = null, clim = 0.3, colorSide = null;
+  const src = v.view.errors_test || v.view.errors_ref;
+  if (src){
+    colorSide = v.view.errors_test ? 'test' : 'ref';
+    clim = src.clim_mm || 0.3;
+    const errBuf = await fetch(src.url).then(r => r.arrayBuffer());
+    const errs = new Float32Array(errBuf);
+    colors = new Float32Array(errs.length * 3);
+    for (let i = 0; i < errs.length; i++){
+      const rgb = rdBuColor(errs[i] / clim);
+      colors[i*3] = ((rgb >> 16) & 255) / 255;
+      colors[i*3+1] = ((rgb >> 8) & 255) / 255;
+      colors[i*3+2] = (rgb & 255) / 255;
+    }
+  }
+  vw.setRef(refGeo, colorSide === 'ref' ? colors : null);
+  vw.setTest(testGeo, colorSide === 'test' ? colors : null);
+  vw.baseHome = null;
+  vw.fit();
+  vw.baseHome = {pos: vw.camera.position.clone(), target: vw.controls.target.clone()};
+  vw.resize();
+  // overlays
+  $('#mesh-stats').textContent =
+    `${testGeo.nVertex.toLocaleString()} verts · ${testGeo.nFace.toLocaleString()} faces`;
+  if (testGeo.nFace > 500000 && !vw.asPoints){
+    vw.asPoints = true; vw.applyRenderMode();
+    toast('Large mesh (>500k faces): showing points first — press Toggle points for the full mesh');
+  }
+  // colorbar
+  const cb = $('#three-colorbar');
+  if (src){
+    cb.style.display = 'flex';
+    $('#colorbar-max').textContent = '+' + Math.round(clim*1000);
+    $('#colorbar-min').textContent = '−' + Math.round(clim*1000);
+    const grad = RDBU.slice().reverse().map((c,i) => `${c} ${(i/(RDBU.length-1)*100).toFixed(0)}%`).join(', ');
+    $('#colorbar-strip').style.background = `linear-gradient(to top, ${grad})`;
+    $('#three-legend').innerHTML =
+      `<b>Aligned test</b> colored by signed error vs the reference surface<br>` +
+      `+ outward (bump) · − inward (dent) · white = 0 · ±${(clim*1000).toFixed(0)} µm saturates` +
+      (v.view.errors_test ? '' : ' (errors at reference vertices)');
+  } else {
+    cb.style.display = 'none';
+    $('#three-legend').innerHTML = '<b>Aligned pair</b> (no per-vertex error map for this input combination)';
+  }
+}
+
+/* ---------------- boot ---------------- */
+async function boot(){
+  const p = parseQS();
+  state.tab = p.tab;
+  setTab(p.tab);
+
+  await Promise.all([loadDatasets(), loadCommands()]);
+  setCommand('run');
+
+  // wire controls
+  $('#run-btn').addEventListener('click', startRun);
+  $('#stop-btn').addEventListener('click', stopRun);
+  $('#reset-btn').addEventListener('click', resetForm);
+  $('#cli-copy').addEventListener('click', () => {
+    navigator.clipboard.writeText($('#cli-line').textContent).then(() => toast('CLI command copied'));
+  });
+
+  // tabs
+  $$('#tabs button').forEach(b => b.addEventListener('click', () => setTab(b.dataset.tab)));
+
+  // log console
+  $('#log-copy').addEventListener('click', () => {
+    navigator.clipboard.writeText($('#logbody').textContent).then(() => toast('Log copied'));
+  });
+  $('#log-clear').addEventListener('click', clearLog);
+  $('#log-toggle').addEventListener('click', () => {
+    const lc = $('#logconsole');
+    lc.classList.toggle('collapsed');
+    $('#log-toggle').textContent = lc.classList.contains('collapsed') ? 'Show' : 'Hide';
+    if (state.viewer) state.viewer.resize();
+  });
+
+  // 3D hud buttons
+  $('#v-reset').addEventListener('click', () => state.viewer && state.viewer.resetView());
+  $('#v-fit').addEventListener('click', () => state.viewer && state.viewer.fit());
+  $('#v-wire').addEventListener('click', () => {
+    if (!state.viewer) return;
+    state.viewer.wireframe = !state.viewer.wireframe;
+    state.viewer.applyRenderMode();
+  });
+  $('#v-points').addEventListener('click', () => {
+    if (!state.viewer) return;
+    state.viewer.asPoints = !state.viewer.asPoints;
+    state.viewer.applyRenderMode();
+  });
+  const REF_LABELS = {wire: 'Reference: wireframe', solid: 'Reference: solid', hidden: 'Reference: hidden'};
+  $('#v-ref').addEventListener('click', () => {
+    if (!state.viewer) return;
+    const v = state.viewer;
+    v.refMode = {wire: 'solid', solid: 'hidden', hidden: 'wire'}[v.refMode];
+    $('#v-ref').textContent = REF_LABELS[v.refMode];
+    state.viewer._rebuild();
+  });
+  $('#compare-btn').addEventListener('click', compareSelected);
+
+  // history + reconnect to an active run (guide §10)
+  refreshHistory();
+  try{
+    const h = await api('/api/health');
+    if (h.active_run){
+      state.activeRun = h.active_run;
+      state.runId = h.active_run;
+      writeQS(false);
+      try { applyRunRecord(await api(`/api/runs/${h.active_run}`)); } catch(e){}
+      watchRun(h.active_run);
+    } else if (p.run){
+      await loadRun(p.run);
+    } else {
+      setStatus('idle');
+    }
+  }catch(e){
+    setStatus('idle');
+    toast('Server unreachable: ' + e.message, true);
+  }
+  // periodic history refresh while running
+  setInterval(() => { if (!state.activeRun) refreshHistory(); }, 15000);
+}
+boot();
+</script>
+</body>
+</html>

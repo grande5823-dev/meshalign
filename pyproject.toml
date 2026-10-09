@@ -1,0 +1,36 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "meshalign"
+version = "0.1.0"
+description = "Rigid mesh/STL alignment and surface-error evaluation toolkit (Open3D-backed, symmetry-safe)"
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.9"
+authors = [{ name = "WPK Lab" }]
+dependencies = [
+    "open3d>=0.18",
+    "numpy>=1.24",
+    "matplotlib>=3.6",
+]
+
+[project.optional-dependencies]
+webapp = ["fastapi>=0.100", "uvicorn[standard]>=0.23", "python-multipart>=0.0.6"]
+metrics = ["pandas>=1.5", "scipy>=1.10"]
+helpers = ["trimesh>=3.21", "scipy>=1.10", "shapely>=2.0", "networkx>=3.0"]
+dev = ["pytest>=7.0", "trimesh>=3.21", "scipy>=1.10", "pandas>=1.5", "shapely>=2.0", "networkx>=3.0"]
+all = ["pandas>=1.5", "scipy>=1.10", "trimesh>=3.21", "shapely>=2.0", "networkx>=3.0"]
+
+[project.scripts]
+meshalign = "meshalign.cli:main"
+
+[tool.setuptools]
+package-dir = { "" = "src" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
