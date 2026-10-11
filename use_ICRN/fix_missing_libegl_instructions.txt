@@ -1,0 +1,40 @@
+# ==============================================================================
+# Instructions & Terminal Script to Fix Missing libEGL.so.1 Without Sudo/Apt
+# ==============================================================================
+# 
+# Problem: 
+#   Open3D (and other graphics-dependent Python packages) require native 
+#   shared libraries like libEGL.so.1, libGL.so.1, and libglvnd. 
+#   In restricted user/Jupyter environments where `sudo` and system `apt` are 
+#   unavailable, you can download and extract these Debian packages locally 
+#   into your home directory and link them via LD_LIBRARY_PATH.
+#
+# Usage:
+#   Copy the block of code below and paste it directly into your terminal 
+#   (or save it as a bash script and run `bash fix_libegl.sh`).
+# ==============================================================================
+
+#!/bin/bash
+set -e
+
+echo "[1/4] Creating local library directory..."
+mkdir -p ~/local-libs && cd ~/local-libs
+
+echo "[2/4] Downloading required Debian graphics packages via wget..."
+wget -c https://launchpad.net/ubuntu/+archive/primary/+files/libegl1_1.7.0-1build1_amd64.deb
+wget -c https://launchpad.net/ubuntu/+archive/primary/+files/libglvnd0_1.7.0-1build1_amd64.deb
+wget -c https://launchpad.net/ubuntu/+archive/primary/+files/libgl1_1.7.0-1build1_amd64.deb
+
+echo "[3/4] Extracting packages locally without root privileges..."
+for deb in *.deb; do 
+    dpkg-deb -x "$deb" ./extracted
+done
+
+echo "[4/4] Setting up runtime library path..."
+export LD_LIBRARY_PATH="$HOME/local-libs/extracted/usr/lib/x86_64-linux-gnu:$HOME/local-libs/extracted/lib/x86_64-linux-gnu:$LD_LIBRARY_PATH"
+
+echo "=============================================================================="
+echo "SUCCESS: Local graphics libraries configured!"
+echo "To make this permanent, add the following line to your ~/.bashrc file:"
+echo 'export LD_LIBRARY_PATH="$HOME/local-libs/extracted/usr/lib/x86_64-linux-gnu:$HOME/local-libs/extracted/lib/x86_64-linux-gnu:$LD_LIBRARY_PATH"'
+echo "=============================================================================="

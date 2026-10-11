@@ -36,6 +36,83 @@ from .io import set_global_seed, load_mesh, load_ref_cached, characteristic_leng
 from .measure import (compute_vertex_error_and_delta_nearest, lumped_areas,
                       area_weighted_mean, area_weighted_cte)
 
+import os
+import numpy as np
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
+
+def plot_and_save_stage(source, target, title, filename):
+    # 1. ADAPTIVELY MULTIPLY TARGET DENSITY BY 1.5 (Target = Blue)
+    if hasattr(target, 'triangles') and hasattr(target, 'vertices'):
+        target_scaled_count = int(len(target.vertices) * 1.5)
+        dense_target = target.sample_points_uniformly(number_of_points=target_scaled_count)
+        tgt_pts = np.asarray(dense_target.points)
+    else:
+        tgt_pts = np.asarray(target.vertices if hasattr(target, 'vertices') else target.points)
+
+    # 2. ADAPTIVELY HALVE SOURCE DENSITY (Source = Red)
+    if hasattr(source, 'triangles') and hasattr(source, 'vertices'):
+        source_halved_count = len(source.vertices) // 2
+        dense_source = source.sample_points_uniformly(number_of_points=source_halved_count)
+        src_pts = np.asarray(dense_source.points)
+    else:
+        src_pts = np.asarray(source.vertices if hasattr(source, 'vertices') else source.points)
+
+    # 3. SET UP A 2x2 GRID FOR MULTIPLE VIEWS
+    # Increased figsize to accommodate 4 plots without squishing
+    fig = plt.figure(figsize=(16, 16))
+    fig.suptitle(title, fontsize=20, y=0.95)
+
+    # Define the 4 camera angles
+    views = [
+        {'name': 'Isometric View', 'elev': 30, 'azim': -60, 'pos': 1},
+        {'name': 'Front View',     'elev': 0,  'azim': -90, 'pos': 2},
+        {'name': 'Right View',     'elev': 0,  'azim': 0,   'pos': 3},
+        {'name': 'Overhead View',  'elev': 90, 'azim': -90, 'pos': 4}
+    ]
+
+    # Calculate standardized axes limits once for all subplots
+    all_pts = np.vstack((src_pts, tgt_pts))
+    max_range = np.array([all_pts[:,0].max()-all_pts[:,0].min(), 
+                          all_pts[:,1].max()-all_pts[:,1].min(), 
+                          all_pts[:,2].max()-all_pts[:,2].min()]).max() / 2.0
+    
+    mid_x = (all_pts[:,0].max()+all_pts[:,0].min()) * 0.5
+    mid_y = (all_pts[:,1].max()+all_pts[:,1].min()) * 0.5
+    mid_z = (all_pts[:,2].max()+all_pts[:,2].min()) * 0.5
+
+    # 4. LOOP THROUGH AND DRAW EACH VIEW
+    for view in views:
+        ax = fig.add_subplot(2, 2, view['pos'], projection='3d')
+        
+        # Plot Target
+        ax.scatter(tgt_pts[:, 0], tgt_pts[:, 1], tgt_pts[:, 2], 
+                   c='blue', s=1, alpha=0.3, label='Target (Ground Truth)')
+        
+        # Plot Source
+        ax.scatter(src_pts[:, 0], src_pts[:, 1], src_pts[:, 2], 
+                   c='red', s=1, alpha=0.8, label='Source (Moving Mesh)')
+
+        # Apply limits
+        ax.set_xlim(mid_x - max_range, mid_x + max_range)
+        ax.set_ylim(mid_y - max_range, mid_y + max_range)
+        ax.set_zlim(mid_z - max_range, mid_z + max_range)
+        
+        # Apply camera angle
+        ax.view_init(elev=view['elev'], azim=view['azim'])
+        ax.set_title(view['name'], fontsize=14, pad=10)
+        
+        # Only add the legend to the first plot to avoid clutter
+        if view['pos'] == 1:
+            ax.legend(loc='upper right')
+
+    plt.tight_layout()
+    # Adding a slight adjustment to prevent the suptitle from overlapping the top plots
+    plt.subplots_adjust(top=0.92) 
+    plt.savefig(filename, dpi=200, bbox_inches='tight')
+    plt.close(fig)
+
 # Identical-ish routing threshold: pairs closer than this mean point-to-surface
 # distance (mm) take the bounded LOCAL path; farther pairs take the GLOBAL search.
 SKIP_THRESH_MM = 3.0
@@ -475,7 +552,7 @@ def align_local(ref_mesh, test_mesh, src, dst, base_score,
               f"best yaw {best_deg:.0f}deg, rotation {ang_deg:.2f}deg).")
     return (best_T, scores) if return_scores else best_T
 
-
+'''Original yaw code
 def _yaw_init(src_centroid, ref_centroid, deg):
     """Centroid-aligned Z-rotation init: rotate ``deg`` about Z, then translate so
     the source centroid lands on the reference centroid. Coarse seed for both the
@@ -488,6 +565,25 @@ def _yaw_init(src_centroid, ref_centroid, deg):
     T0[:3, :3] = Rz
     T0[:3, 3] = ref_centroid - Rz @ src_centroid
     return T0
+    '''
+
+#####CUSTOM YAW CODE#####
+def _yaw_init(src_centroid, ref_centroid, deg):
+    """Modified: Z-rotation init ONLY. Removes the centroid translation 
+    that was pulling small partitions to the center of the large reference."""
+    a = np.radians(deg)
+    Rz = np.array([[np.cos(a), -np.sin(a), 0.0],
+                   [np.sin(a), np.cos(a), 0.0],
+                   [0.0, 0.0, 1.0]])
+    T0 = np.eye(4)
+    T0[:3, :3] = Rz
+    
+    # FIX: Rotate the partition in place around its own center.
+    # By removing 'ref_centroid', we prevent the mesh from jumping up the Z-axis.
+    T0[:3, 3] = src_centroid - (Rz @ src_centroid)
+    
+    return T0
+##########
 
 
 # --------------------------------------------------
@@ -662,13 +758,34 @@ def align_global(src, dst, src_pts, ref_pts, base_score, test_scene=None,
 
     yaw_inits = [_yaw_init(src_c, ref_c, d) for d in yaw_inits_deg]
 
+   
+    '''Original voxel and fpfh code
     # Voxel scaled to object size (bbox diagonal / 50) so feature radii are sensible
     # regardless of the meshes' raw units.
     voxel = float(np.linalg.norm(ref_pts.max(axis=0) - ref_pts.min(axis=0))) / 50.0
 
     src_down, src_fpfh = _fpfh_features(src, voxel)
     dst_down, dst_fpfh = _fpfh_features(dst, voxel)
+    '''
+     #####CUSTOM VOXEL ADAPTIVE SIZING#####
+    # 1. Calculate diagonals for both the source (partition) and destination (reference)
+    src_diag = float(np.linalg.norm(src_pts.max(axis=0) - src_pts.min(axis=0)))
+    dst_diag = float(np.linalg.norm(ref_pts.max(axis=0) - ref_pts.min(axis=0)))
 
+    # 2. Base the voxel resolution on the smallest object in the current batch
+    # Dividing by 30.0 or 40.0 usually provides excellent FPFH feature density
+    min_diag = min(src_diag, dst_diag)
+    adaptive_voxel = min_diag / 40.0
+
+    # 3. Hardware Safety Clamp (CRITICAL)
+    # Prevents Out-Of-Memory (OOM) kernel crashes
+    voxel = max(adaptive_voxel, 0.5) 
+
+    src_down, src_fpfh = _fpfh_features(src, voxel)
+    dst_down, dst_fpfh = _fpfh_features(dst, voxel)
+    ##########
+
+    
     def ransac_init(mutual_filter=False):
         return _ransac_draw(src_down, dst_down, src_fpfh, dst_fpfh, voxel,
                            mutual_filter)
@@ -1337,6 +1454,13 @@ def _align_test(ref_mesh, test_mesh, seed, yaw_inits_deg, verbose=True, mode=DEF
     T = register(ref_mesh, tmesh, seed=seed, yaw_inits_deg=yaw_inits_deg,
                  verbose=verbose, mode=mode)
     tmesh.transform(T)
+
+    ##### CUSTOM VISUALIZATION #####
+    plot_and_save_stage(tmesh, ref_mesh, 
+                        "Stage: Post-Register Function", 
+                        "mid-print_images/stage_post_register.png")
+    ##########
+    
     if isinstance(tmesh, o3d.geometry.TriangleMesh):
         tmesh.compute_vertex_normals()
     elif not tmesh.has_normals():

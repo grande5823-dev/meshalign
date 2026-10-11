@@ -15,6 +15,63 @@ from .measure import (compute_vertex_error_and_delta_nearest, compute_directiona
                       area_weighted_stats)
 from .output import save_error_outputs
 from .align import _align_test, _default_prefix
+import os
+import copy
+import numpy as np
+import matplotlib
+matplotlib.use('Agg') # Required for headless cloud environments
+import matplotlib.pyplot as plt
+
+def plot_and_save_stage(test, reference, title, filename):
+    # 1. ADAPTIVELY MULTIPLY TARGET DENSITY
+    # Check if it is a solid mesh with vertices. If so, double its native vertex count.
+    if hasattr(reference, 'triangles') and hasattr(reference, 'vertices'):
+        reference_doubled_count = int(len(reference.vertices) * 0.75)
+        dense_reference = reference.sample_points_uniformly(number_of_points=reference_doubled_count)
+        tgt_pts = np.asarray(dense_reference.points)
+    else:
+        # Fallback if reference is already a point cloud
+        tgt_pts = np.asarray(reference.vertices if hasattr(reference, 'vertices') else reference.points)
+
+    # 2. ADAPTIVELY MULTIPLY SOURCE DENSITY
+    if hasattr(test, 'triangles') and hasattr(test, 'vertices'):
+        test_doubled_count = int(len(test.vertices) * 0.7)
+        dense_test = test.sample_points_uniformly(number_of_points=test_doubled_count)
+        src_pts = np.asarray(dense_test.points)
+    else:
+        # Fallback if test is already a point cloud
+        src_pts = np.asarray(test.vertices if hasattr(test, 'vertices') else test.points)
+
+    fig = plt.figure(figsize=(10, 8))
+    ax = fig.add_subplot(111, projection='3d')
+
+    # Reference (Ground Truth) - Original blue, semi-transparent
+    ax.scatter(tgt_pts[:, 0], tgt_pts[:, 1], tgt_pts[:, 2], 
+               c='blue', s=1, alpha=0.5, label='Reference (Ground Truth)')
+    
+    # Test (Reconstruction) - Original red, highly opaque
+    ax.scatter(src_pts[:, 0], src_pts[:, 1], src_pts[:, 2], 
+               c='red', s=1, alpha=0.4, label='Test (Moving Mesh)')
+
+    # Standardize axes to prevent visual stretching/distortion
+    all_pts = np.vstack((src_pts, tgt_pts))
+    max_range = np.array([all_pts[:,0].max()-all_pts[:,0].min(), 
+                          all_pts[:,1].max()-all_pts[:,1].min(), 
+                          all_pts[:,2].max()-all_pts[:,2].min()]).max() / 2.0
+    
+    mid_x = (all_pts[:,0].max()+all_pts[:,0].min()) * 0.5
+    mid_y = (all_pts[:,1].max()+all_pts[:,1].min()) * 0.5
+    mid_z = (all_pts[:,2].max()+all_pts[:,2].min()) * 0.5
+    
+    ax.set_xlim(mid_x - max_range, mid_x + max_range)
+    ax.set_ylim(mid_y - max_range, mid_y + max_range)
+    ax.set_zlim(mid_z - max_range, mid_z + max_range)
+
+    ax.set_title(title)
+    ax.legend(loc='upper right')
+    
+    plt.savefig(filename, dpi=200, bbox_inches='tight')
+    plt.close(fig)
 
 
 def _measure_once(ref, test, seed, scale, use_icp, mode=DEFAULT_MODE):
@@ -35,9 +92,11 @@ def _measure_once(ref, test, seed, scale, use_icp, mode=DEFAULT_MODE):
     tmesh = copy.deepcopy(test)
     T_used = np.eye(4)
 
+    #Using ICP#
     if use_icp:
         T_used, tmesh = _align_test(ref, test, seed, GLOBAL_YAW_INITS_DEG, mode=mode)
-
+        print(T_used)
+    
     ref_is_mesh = isinstance(ref, o3d.geometry.TriangleMesh)
     test_is_mesh = isinstance(tmesh, o3d.geometry.TriangleMesh)
 
@@ -141,6 +200,16 @@ def run_pair(ref_stl_path, test_stl_path, out_dir, scale=1.0,
     print(f"  test: {test_stl_path}")
     ref_kind, ref = load_any(ref_stl_path)
     test_kind, test = load_any(test_stl_path)
+
+    ##### CUSTOM VISUALIZATION ###
+    os.makedirs("mid-print_images", exist_ok=True)
+    
+    # Note that we pass 'test' first (source/red), then 'ref' second (target/blue)
+    plot_and_save_stage(test, ref, 
+                        "Stage 1: Initial Misalignment", 
+                        "mid-print_images/stage_1_raw.png")
+    ##########
+    
     os.makedirs(out_dir, exist_ok=True)
 
     if prefix is None:
@@ -152,6 +221,12 @@ def run_pair(ref_stl_path, test_stl_path, out_dir, scale=1.0,
     # per-seed spread is sub-micron -- averaging seeds only multiplies runtime.
     errors_mm, delta_xyz_mm, aligned = _measure_once(
         ref, test, seed, scale, use_icp, mode=mode)
+
+    ##### CUSTOM VISUALIZATION #####
+    plot_and_save_stage(aligned, ref, 
+                        "Stage: Final Align", 
+                        "mid-print_images/final_align.png")
+    ##########
 
     # T1 reporting statistic (docs/theory/t1-sampling-bias.md section 7):
     # mesh-mesh pairs report the AREA-UNIFORM MAE/p95 (G_hat + area-weighted
@@ -267,6 +342,7 @@ def run_pair_relative(ref_stl_path, test_stl_path, out_dir, scale=1.0,
 
     Returns ``(mae_um, p95_um, char_length_um, rel_mae_pct, rel_p95_pct)``.
     """
+    print(use_icp)
     mae_um, p95_um = run_pair(
         ref_stl_path, test_stl_path, out_dir, scale=scale,
         use_icp=use_icp, prefix=prefix, seed=seed,
