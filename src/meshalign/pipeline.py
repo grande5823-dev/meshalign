@@ -222,12 +222,6 @@ def run_pair(ref_stl_path, test_stl_path, out_dir, scale=1.0,
     errors_mm, delta_xyz_mm, aligned = _measure_once(
         ref, test, seed, scale, use_icp, mode=mode)
 
-    ##### CUSTOM VISUALIZATION #####
-    plot_and_save_stage(aligned, ref, 
-                        "Stage: Final Align", 
-                        "mid-print_images/final_align.png")
-    ##########
-
     # T1 reporting statistic (docs/theory/t1-sampling-bias.md section 7):
     # mesh-mesh pairs report the AREA-UNIFORM MAE/p95 (G_hat + area-weighted
     # q95) computed from the same per-vertex distances -- the per-vertex mean

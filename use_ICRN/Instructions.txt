@@ -3,37 +3,7 @@ Start by installing required libraries
 pip install -e .
 export LD_LIBRARY_PATH="$HOME/local-libs/extracted/usr/lib/x86_64-linux-gnu:$HOME/local-libs/extracted/lib/x86_64-linux-gnu:$LD_LIBRARY_PATH"
 
+python align_meshes.py --ref GT_STLs/Empire_100.stl --test Synth_STLs/fast.stl --out results
 
-###FOR CAMERA POSE MATCHING###
-conda create -n foundationpose python=3.10 -y
-conda activate foundationpose
 
-# Install strict CUDA 12.1 PyTorch binaries via pip
-pip install torch==2.1.2 torchvision==0.16.2 torchaudio==2.1.2 --index-url https://download.pytorch.org/whl/cu121
-
-# Install PyTorch3D from Conda-Forge (skips the 10-minute source compilation)
-conda install pytorch3d -c pytorch3d -c conda-forge -y
-
-pip install "numpy<2" setuptools==69.0.0 ipykernel wheel ninja opencv-python trimesh imageio open3d huggingface_hub
-
-# 1. Install the official NVIDIA developer toolkit into the environment
-conda install -y -c nvidia cuda-toolkit=12.1.0
-
-# 2. Define the exact path to your site-packages
-SP_DIR="/home/marcosg2/.conda/envs/foundationpose/lib/python3.10/site-packages"
-
-# 3. Physically copy the missing headers into PyTorch's active include folder
-cp -r $SP_DIR/nvidia/cusparse/include/* $SP_DIR/torch/include/
-cp -r $SP_DIR/nvidia/cublas/include/* $SP_DIR/torch/include/
-
-git clone https://github.com/NVlabs/nvdiffrast.git
-cd nvdiffrast
-python setup.py install
-cd ..
-
-python -m ipykernel install --user --name=foundationpose --display-name="Python 3.10 (FoundationPose)"
-python -m ipykernel install --user --name=foundationpose --display-name="Python 3.10 (FoundationPose)"
-
-####################
-
-python align_meshes.py --ref GT_STLs/Empire_100.stl --test Synth_STLs/ESB_25_ISO_recon.stl --out results
+python batch_align.py --ref GT_STLs/Empire_100.stl --test ../ME470/STL_to_Synthetic_Images/Synth_Hunyuan_STLs/depth --out-dir batch_results --clear-out
